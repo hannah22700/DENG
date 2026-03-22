@@ -1,6 +1,8 @@
 from sqlalchemy import create_engine
 import dataconnector as dc
 import click
+import pandas as pd
+import os
 
 def ingest_data(        
         engine,
@@ -32,14 +34,25 @@ def ingest_data(
 @click.option('--target-table', default='votes', help='Target table name')
 def main(pg_user, pg_pass, pg_host, pg_port, pg_db, chunksize, target_table):
     engine = create_engine(f'postgresql://{pg_user}:{pg_pass}@{pg_host}:{pg_port}/{pg_db}')
+    __location__ = os.path.realpath(os.getcwd())
+    path = os.path.join(__location__, "voting")
 
-    df = dc.get_votes()
+    votes = dc.get_votes()
 
+    dfvotes = pd.DataFrame(votes)
     ingest_data(
         engine=engine,
-        target_table=target_table,
+        target_table='votes',
         chunksize=chunksize,
-        data = df
+        data = dfvotes
+    )
+
+    dfvoting = dc.get_voting_of_votes(votes, path)
+    ingest_data(
+        engine=engine,
+        target_table='voting',
+        chunksize=chunksize,
+        data = dfvoting
     )
 
 if __name__ == "__main__":
