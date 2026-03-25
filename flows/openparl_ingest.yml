@@ -1,0 +1,77 @@
+id: openparl_ingest
+namespace: deng
+
+description: |
+  Fetches votes and voting data from the Swiss Parliament API (swissparlpy)
+  and ingests them into PostgreSQL.
+
+tasks:
+  - id: ingest_votes
+    type: io.kestra.plugin.scripts.python.Script
+    taskRunner:
+      type: io.kestra.plugin.scripts.runner.docker.Docker
+      networkMode: deng_default
+    # For swissparlpy, we need `gcc`, `libxml2-dev`, `libxslt-dev`, so the python-slim is not gonna cut it here...
+    containerImage: python:3.13
+    outputFiles:
+      - "*.csv"
+    dependencies:
+      - swissparlpy
+      - pandas
+      - sqlalchemy
+      - psycopg2-binary
+    script: |
+      import swissparlpy as spp
+      import pandas as pd
+      from sqlalchemy import create_engine
+
+      # Fetch the votes...
+      votes = spp.get_data('Vote', Language='DE')
+      df_votes = pd.DataFrame(votes)
+
+      # Smaller dataset for now (remove later)
+      df_votes = df_votes.head(100)
+
+      df_votes.to_csv('votes.csv', index=False)
+      print(f"Extracted {len(df_votes)} votes")
+
+      # Create tables
+      engine = create_engine('postgresql://root:root@pgdatabase:5432/openparl')
+      df_votes.head(0).to_sql('votes', engine, if_exists='replace')
+      df_votes.to_sql('votes', engine, if_exists='append', chunksize=100000)
+
+  - id: ingest_voting
+    type: io.kestra.plugin.scripts.python.Script
+    taskRunner:
+      type: io.kestra.plugin.scripts.runner.docker.Docker
+      networkMode: deng_default
+    containerImage: python:3.13
+    inputFiles:
+      votes.csv: "{{ outputs.ingest_votes.outputFiles['votes.csv'] }}"
+    dependencies:
+      - swissparlpy
+      - pandas
+      - sqlalchemy
+      - psycopg2-binary
+    script: |
+      import swissparlpy as spp
+      import pandas as pd
+      from sqlalchemy import create_engine
+
+      # Get the votes from the CSV file (output of last task)
+      df_votes = pd.read_csv('votes.csv')
+
+      all_voting = []
+      for _, vote in df_votes.iterrows():
+          data = spp.get_data('Voting', Language='DE', IdVote=vote['ID'])
+          df = pd.DataFrame(data)
+          all_voting.append(df)
+          print(f"Fetched voting for vote {vote['ID']}")
+
+      df_voting = pd.concat(all_voting, ignore_index=True)
+
+      engine = create_engine('postgresql://root:root@pgdatabase:5432/openparl')
+      df_voting.head(0).to_sql('voting', engine, if_exists='replace')
+      df_voting.to_sql('voting', engine, if_exists='append', chunksize=100000)
+
+      print(f"Loaded {len(df_voting)} voting records")

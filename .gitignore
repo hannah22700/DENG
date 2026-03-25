@@ -1,2 +1,6 @@
 .DS_Store
-TODO.md
+*.pks
+__pycache__/
+.zed
+
+.venv
