@@ -1,5 +1,6 @@
 from sqlalchemy import create_engine
 import dataconnector as dc
+import datatransform as dt
 import click
 import pandas as pd
 import os
@@ -40,6 +41,8 @@ def main(pg_user, pg_pass, pg_host, pg_port, pg_db, chunksize, target_table):
     votes = dc.get_votes()
 
     dfvotes = pd.DataFrame(votes)
+    dfvotes = dt.clean_up_votes(dfvotes)
+
     ingest_data(
         engine=engine,
         target_table='votes',
@@ -47,12 +50,27 @@ def main(pg_user, pg_pass, pg_host, pg_port, pg_db, chunksize, target_table):
         data = dfvotes
     )
 
-    dfvoting = dc.get_voting_of_votes(votes, path)
+    print("Finished Ingesting Votes")
+
+    dfvoting = dc.get_voting_of_votes(votes[:50], path)
+    dfvoting = dt.clean_up_voting(dfvoting)
+
     ingest_data(
         engine=engine,
         target_table='voting',
         chunksize=chunksize,
         data = dfvoting
+    )
+
+    print("Finished Ingesting Votings")
+
+    dfpartysummary = dt.create_pary_summary(dfvoting)
+
+    ingest_data(
+        engine=engine,
+        target_table='partysummary',
+        chunksize=chunksize,
+        data = dfpartysummary
     )
 
 if __name__ == "__main__":
