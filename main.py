@@ -73,5 +73,7 @@ def main(pg_user, pg_pass, pg_host, pg_port, pg_db, chunksize, target_table):
         data = dfpartysummary
     )
 
+    print("Finished Ingesting Party Summary")
+
 if __name__ == "__main__":
     main()

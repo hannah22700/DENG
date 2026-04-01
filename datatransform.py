@@ -1,4 +1,5 @@
 import pandas as pd
+import re
 
 def clean_up_votes(votes):
     df = votes.drop("Language",axis=1)
@@ -23,7 +24,6 @@ def create_pary_summary(voting):
 
 
 def clean_column(name):
-    import re
     name = str(name)          
     name = name.replace(" ", "_")  
     name = re.sub(r'\W', '', name)
