@@ -24,7 +24,22 @@ Since this is purely a school project username and pasword will be provied in th
 Username: admin@kestra.io  
 Password: Admin1234!
 
-[TODO] Kestra Part
+### Kestra
+
+After logging into Kestra, you should see the `openparl_ingest` flow in the `deng` namespace. The flow file is automatically loaded on startup.
+
+To run the pipleline: 
+1. Click on the flow `openparl_ingest`
+2. Click "Execute"
+3. Select the number of votes you want to process. The default is 100 votes.
+4. Click "Execute" again to start
+
+The pipeline runs three main tasks sequentially:
+1. **ingest_votes**: This tasks fetches all votes from the Swiss Parliament API and loads them into PostgreSQL. 
+2. **ingest_voting**: This task festches all the individual voting records (from votes) and loads them into PostgreSQL.
+3. **aggregate_party_summary**: The third task aggregates voting records into a per-party summary for each vote
+
+Currently the flow is scheduled to run automatically every Monday morning at 6 AM. It supports backfills via the Kestra UI. You can see this when you have the flow `openparl_ingest` selected, under the Triggers tab.
 
 ## Documentation
 
@@ -41,7 +56,7 @@ The following python dependencies are in use:
 
 ### Extraction
 
-The data extraction is done with the `dataconnctor.py`
+The data extraction is done with the `dataconnector.py`
 
 For the extraction of the data the python library swissparlpy is used.
 The Library provides an abstraction to the api which makes it much easier to use.
@@ -75,12 +90,13 @@ The loading of the data into the Postgres DB is done with the `main.py`
 |ingest_data(engine, data, target_table, chunksize) | converts a dataframe to sql and adds it to the DB |
 | main(pg_user, pg_pass, pg_host, pg_port, pg_db, chunksize) | ties everything together, the loading the transforming and the ingestion of the data.|
 
-[TODO] Kestra Part
+### Pipeline Orchestration
 
-### ???
+The pipeline is orchestrated with [Kestra](https://kestra.io/). The flow definition can be found in `flows/openparl_ingest.yml`. It is loaded automatically into Kestra on startup via the `--flow-path` flag. 
 
-Init Virtual Environment: `uv venv`
-
-Acticvate Virtual Env: `source .venv/bin/activate`
-
-Sync needed dependencies: `uv sync`
+Some key design decisions:
+- **Custom Docker image** (`openparl-kestra:latest`): All necessary Python dependencies are pre-installed to avoid re-installing them individually for every task.
+- **pluginDefaults**: We share a base configuration for Docker task runner, container image, script files across all different tasks. This config is defined once under `pluginDefaults` and inherited by all tasks
+- **Variables**: The database connection string and a predefined chunk size (100000) are defined as flow-level variables
+- **Scheduling**: A weekly cron trigger runs the pipeline every Monday morning at 6 AM
+- **Backfills**: Supported natively through the Kestra UI
