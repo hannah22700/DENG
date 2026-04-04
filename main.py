@@ -14,8 +14,7 @@ import os
 @click.option('--pg-port', default='5432', help='PostgreSQL port')
 @click.option('--pg-db', default='openparl', help='PostgreSQL database name')
 @click.option('--chunksize', default=100000, type=int, help='Chunk size for ingestion')
-@click.option('--target-table', default='votes', help='Target table name')
-def main(pg_user, pg_pass, pg_host, pg_port, pg_db, chunksize, target_table):
+def main(pg_user, pg_pass, pg_host, pg_port, pg_db, chunksize):
     engine = create_engine(f'postgresql://{pg_user}:{pg_pass}@{pg_host}:{pg_port}/{pg_db}')
 
     __location__ = os.path.realpath(os.getcwd())
@@ -35,7 +34,7 @@ def main(pg_user, pg_pass, pg_host, pg_port, pg_db, chunksize, target_table):
 
     print("Finished Ingesting Votes")
 
-    dfvoting = dc.get_voting_of_votes(votes[:50], path)
+    dfvoting = dc.get_voting_of_votes(votes, path)
     dfvoting = dt.clean_up_voting(dfvoting)
 
     di.ingest_data(
