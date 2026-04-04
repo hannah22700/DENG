@@ -11,7 +11,7 @@ def get_voting_of_votes(votes,path):
         save_voting_of_vote(vote['ID'], path)
 
     df_voting = pd.concat([pd.read_pickle(os.path.join(path, x)) for x in os.listdir(path)])
-
+    delete_pickels(path)
     return df_voting
 
 
@@ -24,3 +24,10 @@ def save_voting_of_vote(id, path):
     pickle_path = os.path.join(path, f'{id}.pks')
     df.to_pickle(pickle_path)
     print(f"Saved pickle at {pickle_path}")
+
+def delete_pickels(path):
+    for filename in os.listdir(path):
+        file_path = os.path.join(path, filename)
+        if os.path.isfile(file_path):
+            os.remove(file_path)
+    print("Removed pickles in", path)

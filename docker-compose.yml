@@ -63,8 +63,8 @@ services:
       - kestra_data:/app/storage
       - /var/run/docker.sock:/var/run/docker.sock
       - kestra_tmp:/tmp/kestra-wd
-      - ./scripts:/app/scripts # We mount the scripts folder into /app/scripts 
-      - ./flows:/app/flows # We mount our flows folder, so user doesn't have to import manually 
+      - ./scripts:/app/scripts # We mount the scripts folder into /app/scripts
+      - ./flows:/app/flows # We mount our flows folder, so user doesn't have to import manually
     environment:
       KESTRA_CONFIGURATION: |
         datasources:
@@ -78,7 +78,7 @@ services:
             enabled: false
           server:
             basicAuth:
-              username: "admin@kestra.io" # it must be a valid email address
+              username: "admin@kestra.io"
               password: Admin1234!
           repository:
             type: postgres
