@@ -23,6 +23,12 @@ services:
       kestra:
         condition: service_started
 
+  openparl-python:
+    build:
+      context: .
+      dockerfile: Dockerfile.kestra
+    image: openparl-kestra:latest
+
   pgadmin:
     image: dpage/pgadmin4
     environment:
@@ -52,11 +58,13 @@ services:
     image: kestra/kestra:v1.1
     pull_policy: always
     user: "root"
-    command: server standalone
+    command: server standalone --flow-path /app/flows
     volumes:
       - kestra_data:/app/storage
       - /var/run/docker.sock:/var/run/docker.sock
       - kestra_tmp:/tmp/kestra-wd
+      - ./scripts:/app/scripts # We mount the scripts folder into /app/scripts 
+      - ./flows:/app/flows # We mount our flows folder, so user doesn't have to import manually 
     environment:
       KESTRA_CONFIGURATION: |
         datasources:
@@ -66,6 +74,8 @@ services:
             username: kestra
             password: k3str4
         kestra:
+          tutorial-flows:
+            enabled: false
           server:
             basicAuth:
               username: "admin@kestra.io" # it must be a valid email address
@@ -82,6 +92,9 @@ services:
             tmpDir:
               path: /tmp/kestra-wd/tmp
           url: http://localhost:8080/
+          local-files:
+            allowed-paths:
+              - /app/scripts
     ports:
       - "8080:8080"
       - "8081:8081"

@@ -1,77 +1,139 @@
 id: openparl_ingest
 namespace: deng
-
 description: |
   Fetches votes and voting data from the Swiss Parliament API (swissparlpy)
-  and ingests them into PostgreSQL.
+  and ingests them into the PostgreSQL. The third task aggregates and stores 
+  individual voting records into a per-party summary for each vote.
+
+# Sharing resources across our different tasks
+variables:
+  db_url: "postgresql://root:root@pgdatabase:5432/openparl"
+  chunksize: 100000
+
+pluginDefaults: 
+  - type: io.kestra.plugin.scripts.python.Script
+    values:
+      taskRunner:
+        type: io.kestra.plugin.scripts.runner.docker.Docker
+        networkMode: deng_default
+        pullPolicy: NEVER
+      containerImage: openparl-kestra:latest
+      inputFiles:   
+        dataingest.py: "file:///app/scripts/dataingest.py"
+        datatransform.py: "file:///app/scripts/datatransform.py"
+        dataconnector.py: "file:///app/scripts/dataconnector.py"
+
+inputs:
+  - id: num_votes
+    type: SELECT
+    displayName: Select the number of votes
+    values: ["10", "50", "100", "250", "1000"]
+    defaults: "100"
 
 tasks:
   - id: ingest_votes
     type: io.kestra.plugin.scripts.python.Script
-    taskRunner:
-      type: io.kestra.plugin.scripts.runner.docker.Docker
-      networkMode: deng_default
-    # For swissparlpy, we need `gcc`, `libxml2-dev`, `libxslt-dev`, so the python-slim is not gonna cut it here...
-    containerImage: python:3.13
     outputFiles:
-      - "*.csv"
-    dependencies:
-      - swissparlpy
-      - pandas
-      - sqlalchemy
-      - psycopg2-binary
+      - "*.pkl"
     script: |
-      import swissparlpy as spp
+      import dataconnector as dc
+      import datatransform as dt
+      import dataingest as di
       import pandas as pd
       from sqlalchemy import create_engine
 
-      # Fetch the votes...
-      votes = spp.get_data('Vote', Language='DE')
-      df_votes = pd.DataFrame(votes)
+      # We create the access point to our database
+      engine = create_engine('{{ vars.db_url }}')
 
-      # Smaller dataset for now (remove later)
-      df_votes = df_votes.head(100)
+      # We fetch the votes from the Swiss Parliament API
+      votes = dc.get_votes()
+      
+      # We stick them into a Pandas dataframe
+      dfvotes = pd.DataFrame(votes)
 
-      df_votes.to_csv('votes.csv', index=False)
-      print(f"Extracted {len(df_votes)} votes")
+      # We drop languages, as we only use German version of votes
+      dfvotes = dt.clean_up_votes(dfvotes)
 
-      # Create tables
-      engine = create_engine('postgresql://root:root@pgdatabase:5432/openparl')
-      df_votes.head(0).to_sql('votes', engine, if_exists='replace')
-      df_votes.to_sql('votes', engine, if_exists='append', chunksize=100000)
+      # We ingest the votes into our postgresql db
+      di.ingest_data(
+        engine=engine,
+        target_table='votes',
+        chunksize={{ vars.chunksize }},
+        data = dfvotes
+      )
+
+      dfvotes.to_pickle('votes.pkl')
+      print("Finished Ingesting Votes")
 
   - id: ingest_voting
     type: io.kestra.plugin.scripts.python.Script
-    taskRunner:
-      type: io.kestra.plugin.scripts.runner.docker.Docker
-      networkMode: deng_default
-    containerImage: python:3.13
     inputFiles:
-      votes.csv: "{{ outputs.ingest_votes.outputFiles['votes.csv'] }}"
-    dependencies:
-      - swissparlpy
-      - pandas
-      - sqlalchemy
-      - psycopg2-binary
+      votes.pkl: "{{ outputs.ingest_votes.outputFiles['votes.pkl'] }}"
+    outputFiles:
+      - "*.pkl"
+    script: |
+      import swissparlpy as spp
+      import pandas as pd
+      import os
+      import dataconnector as dc
+      import datatransform as dt
+      import dataingest as di
+      from sqlalchemy import create_engine
+
+      # We create the access point to our database
+      engine = create_engine('{{ vars.db_url }}')
+
+      __location__ = os.path.realpath(os.getcwd())
+      path = os.path.join(__location__, "voting")
+
+      # Get the votes from the CSV file (output of last task)
+      dfvotes = pd.read_pickle('votes.pkl')
+      votes = dfvotes.to_dict('records')  
+
+      # dfvoting = dc.get_voting_of_votes(votes[:{{inputs.num_votes}}], path)
+      dfvoting = dc.get_voting_of_votes(dfvotes.head({{inputs.num_votes}}).to_dict('records'), path)
+
+      dfvoting = dt.clean_up_voting(dfvoting)
+
+      di.ingest_data(
+          engine=engine,
+          target_table='voting',
+          chunksize={{ vars.chunksize }},
+          data = dfvoting
+      )
+
+      dfvoting.to_pickle('dfvoting.pkl')
+
+      print("Finished Ingesting Votings")
+
+  - id: aggregate_party_summary
+    type: io.kestra.plugin.scripts.python.Script
+    inputFiles:
+      (dfvoting.pkl: "{{ outputs.ingest_voting.outputFiles['dfvoting.pkl'] }}"
     script: |
       import swissparlpy as spp
       import pandas as pd
       from sqlalchemy import create_engine
+      import os
 
-      # Get the votes from the CSV file (output of last task)
-      df_votes = pd.read_csv('votes.csv')
+      import datatransform as dt
+      import dataingest as di
 
-      all_voting = []
-      for _, vote in df_votes.iterrows():
-          data = spp.get_data('Voting', Language='DE', IdVote=vote['ID'])
-          df = pd.DataFrame(data)
-          all_voting.append(df)
-          print(f"Fetched voting for vote {vote['ID']}")
+      # We get the pickel from the last task and stick it into a dataframe
+      dfvoting = pd.read_pickle('dfvoting.pkl')
+      
+      # We create the access point to our database
+      engine = create_engine('{{ vars.db_url }}')
 
-      df_voting = pd.concat(all_voting, ignore_index=True)
+      # We aggregate the party summary... 
+      dfpartysummary = dt.create_party_summary(dfvoting)
 
-      engine = create_engine('postgresql://root:root@pgdatabase:5432/openparl')
-      df_voting.head(0).to_sql('voting', engine, if_exists='replace')
-      df_voting.to_sql('voting', engine, if_exists='append', chunksize=100000)
+      # ...and ingest it into our database
+      di.ingest_data(
+          engine=engine,
+          target_table='partysummary',
+          chunksize={{ vars.chunksize }},
+          data = dfpartysummary
+      )
 
-      print(f"Loaded {len(df_voting)} voting records")
+      print("Finished Ingesting Party Summary")

@@ -1,0 +1,8 @@
+# Custom Dockerfile for Kestra tasks
+
+# For swissparlpy, we need `gcc`, `libxml2-dev`, `libxslt-dev`, so python-slim is not gonna cut it here...
+FROM python:3.13
+RUN pip install --upgrade pip
+
+# Install dependencies
+RUN pip install --no-cache-dir kestra requests pandas swissparlpy sqlalchemy psycopg2-binary

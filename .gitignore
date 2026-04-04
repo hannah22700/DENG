@@ -2,5 +2,6 @@
 *.pks
 __pycache__/
 .zed
+.vscode 
 
 .venv

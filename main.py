@@ -1,28 +1,10 @@
 from sqlalchemy import create_engine
 import dataconnector as dc
 import datatransform as dt
+import dataingest as di
 import click
 import pandas as pd
 import os
-
-def ingest_data(        
-        engine,
-        data,
-        target_table: str,
-        chunksize: int = 100000,):
-    
-    data.head(0).to_sql(        
-        name=target_table,
-        con=engine,
-        if_exists="replace")
-
-    data.to_sql(
-        name=target_table,
-        con=engine,
-        if_exists="append",
-        chunksize = chunksize
-    )
-
 
 
 @click.command()
@@ -35,6 +17,7 @@ def ingest_data(
 @click.option('--target-table', default='votes', help='Target table name')
 def main(pg_user, pg_pass, pg_host, pg_port, pg_db, chunksize, target_table):
     engine = create_engine(f'postgresql://{pg_user}:{pg_pass}@{pg_host}:{pg_port}/{pg_db}')
+
     __location__ = os.path.realpath(os.getcwd())
     path = os.path.join(__location__, "voting")
 
@@ -43,7 +26,7 @@ def main(pg_user, pg_pass, pg_host, pg_port, pg_db, chunksize, target_table):
     dfvotes = pd.DataFrame(votes)
     dfvotes = dt.clean_up_votes(dfvotes)
 
-    ingest_data(
+    di.ingest_data(
         engine=engine,
         target_table='votes',
         chunksize=chunksize,
@@ -55,7 +38,7 @@ def main(pg_user, pg_pass, pg_host, pg_port, pg_db, chunksize, target_table):
     dfvoting = dc.get_voting_of_votes(votes[:50], path)
     dfvoting = dt.clean_up_voting(dfvoting)
 
-    ingest_data(
+    di.ingest_data(
         engine=engine,
         target_table='voting',
         chunksize=chunksize,
@@ -64,9 +47,9 @@ def main(pg_user, pg_pass, pg_host, pg_port, pg_db, chunksize, target_table):
 
     print("Finished Ingesting Votings")
 
-    dfpartysummary = dt.create_pary_summary(dfvoting)
+    dfpartysummary = dt.create_party_summary(dfvoting)
 
-    ingest_data(
+    di.ingest_data(
         engine=engine,
         target_table='partysummary',
         chunksize=chunksize,
