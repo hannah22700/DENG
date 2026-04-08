@@ -2,7 +2,7 @@ id: openparl_ingest
 namespace: deng
 description: |
   Fetches votes and voting data from the Swiss Parliament API (swissparlpy)
-  and ingests them into the PostgreSQL. The third task aggregates and stores 
+  and ingests them into the PostgreSQL. The third task aggregates and stores
   individual voting records into a per-party summary for each vote.
 
 # Sharing resources across our different tasks
@@ -14,7 +14,7 @@ inputs:
   - id: num_votes
     type: SELECT
     displayName: Select the number of votes
-    values: ["10", "50", "100", "250", "1000"]
+    values: ["10", "50", "100", "250", "1000", "all"]
     defaults: "100"
 
 tasks:
@@ -34,7 +34,7 @@ tasks:
 
       # We fetch the votes from the Swiss Parliament API
       votes = dc.get_votes()
-      
+
       # We stick them into a Pandas dataframe
       dfvotes = pd.DataFrame(votes)
 
@@ -75,10 +75,14 @@ tasks:
 
       # Get the votes from the pickle file (output of last task)
       dfvotes = pd.read_pickle('votes.pkl')
-      
+
       # We get the individual votings out of the votes
+      {% if inputs.num_votes == 'all' %}
+      dfvoting = dc.get_voting_of_votes(dfvotes.to_dict('records'), path)
+      {% else %}
       dfvoting = dc.get_voting_of_votes(dfvotes.head({{ inputs.num_votes }}).to_dict('records'), path)
-      
+      {% endif %}
+
       # Dropping columns, cleaning up
       dfvoting = dt.clean_up_voting(dfvoting)
 
@@ -108,11 +112,11 @@ tasks:
 
       # We get the pickel from the last task and stick it into a dataframe
       dfvoting = pd.read_pickle('dfvoting.pkl')
-      
-      # PostgreSQL Database 
+
+      # PostgreSQL Database
       engine = create_engine('{{ vars.db_url }}')
 
-      # We aggregate the party summary... 
+      # We aggregate the party summary...
       dfpartysummary = dt.create_party_summary(dfvoting)
 
       # ...and ingest it into our database
@@ -125,7 +129,7 @@ tasks:
 
       print("Finished Ingesting Party Summary")
 
-pluginDefaults: 
+pluginDefaults:
   - type: io.kestra.plugin.scripts.python.Script
     values:
       taskRunner:
@@ -133,7 +137,7 @@ pluginDefaults:
         networkMode: deng_default
         pullPolicy: NEVER
       containerImage: openparl-kestra:latest
-      inputFiles:   
+      inputFiles:
         dataingest.py: "file:///app/scripts/dataingest.py"
         datatransform.py: "file:///app/scripts/datatransform.py"
         dataconnector.py: "file:///app/scripts/dataconnector.py"
@@ -141,4 +145,4 @@ pluginDefaults:
 triggers:
   - id: weekly_schedule
     type: io.kestra.plugin.core.trigger.Schedule
-    cron: "0 6 * * 1"  # Every Monday, 6 AM
+    cron: "0 6 * * 1" # Every Monday, 6 AM
