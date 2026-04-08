@@ -1,5 +1,5 @@
--- Ja-Sager
-SELECT "ParlGroupName", "DecisionText", "BillTitle", COUNT(*) as vote_count
+-- Yay Sayers
+SELECT "ParlGroupName", "DecisionText", COUNT(*) as vote_count
 FROM voting
 WHERE "DecisionText" = 'Ja'
 GROUP BY "ParlGroupName", "DecisionText"
