@@ -41,6 +41,8 @@ The pipeline runs three main tasks sequentially:
 
 Currently the flow is scheduled to run automatically every Monday morning at 6 AM. It supports backfills via the Kestra UI. You can see this when you have the flow `openparl_ingest` selected, under the Triggers tab.
 
+![Architecture](./diagrams/legislens_architecture.svg)
+
 ## Documentation
 
 ### Dependencies

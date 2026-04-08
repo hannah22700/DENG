@@ -1,21 +1,25 @@
-from sqlalchemy import create_engine
-import dataconnector as dc
-import datatransform as dt
-import dataingest as di
+import os
+
 import click
 import pandas as pd
-import os
+from sqlalchemy import create_engine
+
+import scripts.dataconnector as dc
+import scripts.dataingest as di
+import scripts.datatransform as dt
 
 
 @click.command()
-@click.option('--pg-user', default='root', help='PostgreSQL username')
-@click.option('--pg-pass', default='root', help='PostgreSQL password')
-@click.option('--pg-host', default='localhost', help='PostgreSQL host')
-@click.option('--pg-port', default='5432', help='PostgreSQL port')
-@click.option('--pg-db', default='openparl', help='PostgreSQL database name')
-@click.option('--chunksize', default=100000, type=int, help='Chunk size for ingestion')
+@click.option("--pg-user", default="root", help="PostgreSQL username")
+@click.option("--pg-pass", default="root", help="PostgreSQL password")
+@click.option("--pg-host", default="localhost", help="PostgreSQL host")
+@click.option("--pg-port", default="5432", help="PostgreSQL port")
+@click.option("--pg-db", default="openparl", help="PostgreSQL database name")
+@click.option("--chunksize", default=100000, type=int, help="Chunk size for ingestion")
 def main(pg_user, pg_pass, pg_host, pg_port, pg_db, chunksize):
-    engine = create_engine(f'postgresql://{pg_user}:{pg_pass}@{pg_host}:{pg_port}/{pg_db}')
+    engine = create_engine(
+        f"postgresql://{pg_user}:{pg_pass}@{pg_host}:{pg_port}/{pg_db}"
+    )
 
     __location__ = os.path.realpath(os.getcwd())
     path = os.path.join(__location__, "voting")
@@ -26,10 +30,7 @@ def main(pg_user, pg_pass, pg_host, pg_port, pg_db, chunksize):
     dfvotes = dt.clean_up_votes(dfvotes)
 
     di.ingest_data(
-        engine=engine,
-        target_table='votes',
-        chunksize=chunksize,
-        data = dfvotes
+        engine=engine, target_table="votes", chunksize=chunksize, data=dfvotes
     )
 
     print("Finished Ingesting Votes")
@@ -38,10 +39,7 @@ def main(pg_user, pg_pass, pg_host, pg_port, pg_db, chunksize):
     dfvoting = dt.clean_up_voting(dfvoting)
 
     di.ingest_data(
-        engine=engine,
-        target_table='voting',
-        chunksize=chunksize,
-        data = dfvoting
+        engine=engine, target_table="voting", chunksize=chunksize, data=dfvoting
     )
 
     print("Finished Ingesting Votings")
@@ -50,12 +48,13 @@ def main(pg_user, pg_pass, pg_host, pg_port, pg_db, chunksize):
 
     di.ingest_data(
         engine=engine,
-        target_table='partysummary',
+        target_table="partysummary",
         chunksize=chunksize,
-        data = dfpartysummary
+        data=dfpartysummary,
     )
 
     print("Finished Ingesting Party Summary")
+
 
 if __name__ == "__main__":
     main()
