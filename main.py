@@ -16,7 +16,9 @@ import scripts.datatransform as dt
 @click.option("--pg-port", default="5432", help="PostgreSQL port")
 @click.option("--pg-db", default="openparl", help="PostgreSQL database name")
 @click.option("--chunksize", default=100000, type=int, help="Chunk size for ingestion")
-def main(pg_user, pg_pass, pg_host, pg_port, pg_db, chunksize):
+@click.option("--voteCount", default=100, type=int, help="Number of votes to get votings for")
+def main(pg_user, pg_pass, pg_host, pg_port, pg_db, chunksize, votecount):
+    print("Starting Pipeline")
     engine = create_engine(
         f"postgresql://{pg_user}:{pg_pass}@{pg_host}:{pg_port}/{pg_db}"
     )
@@ -24,6 +26,7 @@ def main(pg_user, pg_pass, pg_host, pg_port, pg_db, chunksize):
     __location__ = os.path.realpath(os.getcwd())
     path = os.path.join(__location__, "voting")
 
+    print("Getting votes...")
     votes = dc.get_votes()
 
     dfvotes = pd.DataFrame(votes)
@@ -35,7 +38,8 @@ def main(pg_user, pg_pass, pg_host, pg_port, pg_db, chunksize):
 
     print("Finished Ingesting Votes")
 
-    dfvoting = dc.get_voting_of_votes(votes, path)
+    print("Gettting vortings")
+    dfvoting = dc.get_voting_of_votes(votes[:votecount], path)
     dfvoting = dt.clean_up_voting(dfvoting)
 
     di.ingest_data(
@@ -43,6 +47,8 @@ def main(pg_user, pg_pass, pg_host, pg_port, pg_db, chunksize):
     )
 
     print("Finished Ingesting Votings")
+
+    print("Creating Party summary")
 
     dfpartysummary = dt.create_party_summary(dfvoting)
 
