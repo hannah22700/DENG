@@ -18,13 +18,15 @@ Wait until the containers finished starting.
 
 To start the pipeline locally without orchestration the `main.py` can be used.
 
-Start the local pipeline with:
+Make sure you have uv installed, for the command to work.
 
-The parameter voteCount is used to control the number of votes that votings will be collected from. If the number is two large the pipeline will take very long.
+Start the local pipeline with:
 
 ```
 uv run main.py --voteCount=10
 ```
+
+The parameter voteCount is used to control the number of votes that votings will be collected from. If the number is two large the pipeline will take very long.
 
 ### Verify pipeline result
 
