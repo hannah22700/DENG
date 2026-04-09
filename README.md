@@ -101,4 +101,4 @@ Some key design decisions:
 - **pluginDefaults**: We share a base configuration for Docker task runner, container image, script files across all different tasks. This config is defined once under `pluginDefaults` and inherited by all tasks
 - **Variables**: The database connection string and a predefined chunk size (100000) are defined as flow-level variables
 - **Scheduling**: A weekly cron trigger runs the pipeline every Monday morning at 6 AM
-- **Backfills**: Supported natively through the Kestra UI
+- **Backfills**: The pipeline follows a full-refresh strategy: every run fetches the complete dataset and replaces the existing tables, making it idempotent. A single execution always produces a fully up-to-date database, regardless of missed runs. Backfills can be triggered manually through the Kestra UI under the Triggers tab.
