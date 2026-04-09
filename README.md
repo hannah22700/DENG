@@ -20,10 +20,10 @@ To start the pipeline locally without orchestration the `main.py` can be used.
 
 Start the local pipeline with:
 
-The parameter votecount is used to control the number of votes that votings will be collected from. If the number is two large the pipeline will take very long.
+The parameter voteCount is used to control the number of votes that votings will be collected from. If the number is two large the pipeline will take very long.
 
 ```
-uv run main.py --votecount=10
+uv run main.py --voteCount=10
 ```
 
 ### Verify pipeline result
@@ -91,6 +91,7 @@ The following python dependencies are in use:
 | jupyter | 1.1.1 | used for jupyter notebooks to play around and test certain things |
 | pandas | 3.0.1 | used for the organization of data into dataframes and some statistical methods |
 | sqlalchemy | 2.0.48 | used for the engine to connect to the posgres DB|
+| psycopg2-binary | 2.9.11 | Used to connect to the postgres DB|
 | swissparlpy | 1.0.0 | used as abstraction of the SwissParl API |
 
 ### Extraction
