@@ -16,7 +16,44 @@ Start it with:
 
 Wait until the containers finished starting.
 
-After that you can check the Kestra User Interface to see the pipeline.
+To start the pipeline locally without orchestration the `main.py` can be used.
+
+Start the local pipeline with:
+
+The parameter votecount is used to control the number of votes that votings will be collected from. If the number is two large the pipeline will take very long.
+
+```
+uv run main.py --votecount=10
+```
+
+### Verify pipeline result
+
+To verify the result of the pipeline the postgres database is accessible with pgadmin:
+https://localhost:8085
+
+Username: admin@admin.com
+Password: root
+
+In pgadmin the database can be connected like this:
+
+![Connect to PGdatabase](./media/pgdb1.png)
+
+![Connect to PGdatabase](./media/pgdb2.png)
+
+In the connection tab the following credentials have to be entered:
+
+Username: root  
+Password: root
+
+![Connect to PGdatabase](./media/pgdb3.png)
+
+Now the three tables that were created by the pipeline should there:  
+![Connect to PGdatabase](./media/pgdb4.png)
+
+The data can now be freely explored.
+
+### Kestra
+
 Access Kestra on https://localhost:8080
 
 Since this is purely a school project username and pasword will be provied in this README.
@@ -24,18 +61,18 @@ Since this is purely a school project username and pasword will be provied in th
 Username: admin@kestra.io  
 Password: Admin1234!
 
-### Kestra
-
 After logging into Kestra, you should see the `openparl_ingest` flow in the `deng` namespace. The flow file is automatically loaded on startup.
 
-To run the pipleline: 
+To run the pipleline:
+
 1. Click on the flow `openparl_ingest`
 2. Click "Execute"
 3. Select the number of votes you want to process. The default is 100 votes.
 4. Click "Execute" again to start
 
 The pipeline runs three main tasks sequentially:
-1. **ingest_votes**: This tasks fetches all votes from the Swiss Parliament API and loads them into PostgreSQL. 
+
+1. **ingest_votes**: This tasks fetches all votes from the Swiss Parliament API and loads them into PostgreSQL.
 2. **ingest_voting**: This task festches all the individual voting records (from votes) and loads them into PostgreSQL.
 3. **aggregate_party_summary**: The third task aggregates voting records into a per-party summary for each vote
 
@@ -94,9 +131,10 @@ The loading of the data into the Postgres DB is done with the `main.py`
 
 ### Pipeline Orchestration
 
-The pipeline is orchestrated with [Kestra](https://kestra.io/). The flow definition can be found in `flows/openparl_ingest.yml`. It is loaded automatically into Kestra on startup via the `--flow-path` flag. 
+The pipeline is orchestrated with [Kestra](https://kestra.io/). The flow definition can be found in `flows/openparl_ingest.yml`. It is loaded automatically into Kestra on startup via the `--flow-path` flag.
 
 Some key design decisions:
+
 - **Custom Docker image** (`openparl-kestra:latest`): All necessary Python dependencies are pre-installed to avoid re-installing them individually for every task.
 - **pluginDefaults**: We share a base configuration for Docker task runner, container image, script files across all different tasks. This config is defined once under `pluginDefaults` and inherited by all tasks
 - **Variables**: The database connection string and a predefined chunk size (100000) are defined as flow-level variables
