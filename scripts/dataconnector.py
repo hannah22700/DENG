@@ -2,8 +2,12 @@ import pandas as pd
 import swissparlpy as spp
 import os
 
-def get_votes():
-    data = spp.get_data('Vote', Language="DE")
+
+
+def get_votes(since, until):
+    since = pd.to_datetime(since).tz_localize("UTC")
+    until = pd.to_datetime(until).tz_localize("UTC")
+    data = spp.get_data('Vote', Language="DE", VoteEnd__gt=since, VoteEnd__lt=until)
     return data
 
 def get_voting_of_votes(votes,path):
@@ -19,11 +23,9 @@ def save_voting_of_vote(id, path):
     if not os.path.exists(path):
         os.mkdir(path)
     data = spp.get_data("Voting", Language="DE", IdVote=id)
-    print(f"{data.count} rows loaded.")
     df = pd.DataFrame(data)
     pickle_path = os.path.join(path, f'{id}.pks')
     df.to_pickle(pickle_path)
-    print(f"Saved pickle at {pickle_path}")
 
 def delete_pickels(path):
     for filename in os.listdir(path):

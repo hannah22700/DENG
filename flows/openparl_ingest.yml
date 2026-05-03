@@ -2,20 +2,20 @@ id: openparl_ingest
 namespace: deng
 description: |
   Fetches votes and voting data from the Swiss Parliament API (swissparlpy)
-  and ingests them into the PostgreSQL. The third task aggregates and stores
-  individual voting records into a per-party summary for each vote.
+  and writes them to Google Cloud Storag in csv format.
 
 # Sharing resources across our different tasks
 variables:
-  db_url: "postgresql://root:root@pgdatabase:5432/openparl"
-  chunksize: 100000
+  chunksize: 8388608
+  filepath: "output"
 
 inputs:
-  - id: num_votes
-    type: SELECT
-    displayName: Select the number of votes
-    values: ["10", "50", "100", "250", "1000", "all"]
-    defaults: "100"
+  - id: since
+    type: DATE
+    displayName: Select the start date of the ingest
+  - id: until
+    type: DATE
+    displayName: Select the until date of the ingest
 
 tasks:
   - id: ingest_votes
@@ -24,33 +24,43 @@ tasks:
       - "*.pkl"
     script: |
       import dataconnector as dc
-      import datatransform as dt
       import dataingest as di
       import pandas as pd
-      from sqlalchemy import create_engine
+      import os
+      from datetime import datetime 
 
-      # We create the access point to our database
-      engine = create_engine('{{ vars.db_url }}')
+      CREDENTIALS_FILE = os.getenv("GOOGLE_CREDENTIALS")
+      PROJECT_NAME = os.getenv("PROJECT_NAME")
+      BUCKET_NAME = os.getenv("BUCKET_NAME")
+      FILE_PATH = "{{ vars.filepath }}"
+      CHUNKSIZE = "{{ vars.chunksize }}"
+      now = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-      # We fetch the votes from the Swiss Parliament API
-      votes = dc.get_votes()
 
-      # We stick them into a Pandas dataframe
+      os.makedirs(FILE_PATH, exist_ok=True)
+
+      gcsc = di.gcs_connector(CREDENTIALS_FILE, BUCKET_NAME)
+
+      print("Starting Pipeline")
+
+      __location__ = os.path.realpath(os.getcwd())
+      path = os.path.join(__location__, "voting")
+
+      print("Getting votes...")
+      votes = dc.get_votes(since, until)
+
       dfvotes = pd.DataFrame(votes)
 
-      # We drop languages, as we only use German version of votes
-      dfvotes = dt.clean_up_votes(dfvotes)
+      print(f"Got {len(dfvotes)} Votes")
 
-      # We ingest the votes into our postgresql db
-      di.ingest_data(
-        engine=engine,
-        target_table='votes',
-        chunksize={{ vars.chunksize }},
-        data = dfvotes
-      )
+      dfvotes.to_csv(f"{FILE_PATH}/votes_{since}_{until}_{now}.csv")
+
+      print("Uploading Votes")
+      gcsc.upload_to_gcs(f"{FILE_PATH}/votes_{since}_{until}_{now}.csv", CHUNKSIZE)
 
       dfvotes.to_pickle('votes.pkl')
-      print("Finished Ingesting Votes")
+
+      print("Finished Uploading Votes")
 
   - id: ingest_voting
     type: io.kestra.plugin.scripts.python.Script
@@ -59,16 +69,28 @@ tasks:
     outputFiles:
       - "*.pkl"
     script: |
-      import swissparlpy as spp
+      import dataconnector as dc
+      import dataingest as di
       import pandas as pd
       import os
-      import dataconnector as dc
-      import datatransform as dt
-      import dataingest as di
-      from sqlalchemy import create_engine
+      from datetime import datetime
+      now = datetime.now().strftime("%Y%m%d_%H%M%S") 
 
-      # We create the access point to our database
-      engine = create_engine('{{ vars.db_url }}')
+      CREDENTIALS_FILE = os.getenv("GOOGLE_CREDENTIALS")
+      PROJECT_NAME = os.getenv("PROJECT_NAME")
+      BUCKET_NAME = os.getenv("BUCKET_NAME")
+      FILEPATH = "{{ vars.filepath }}"
+      CHUNKSIZE = "{{ vars.chunksize }}"
+
+      since = "{{ inputs.since }}"
+      until = "{{ inputs.until }}"
+
+
+      os.makedirs(FILE_PATH, exist_ok=True)
+
+      gcsc = di.gcs_connector(CREDENTIALS_FILE, BUCKET_NAME)
+
+      print("Starting Pipeline")
 
       __location__ = os.path.realpath(os.getcwd())
       path = os.path.join(__location__, "voting")
@@ -76,67 +98,29 @@ tasks:
       # Get the votes from the pickle file (output of last task)
       dfvotes = pd.read_pickle('votes.pkl')
 
-      # We get the individual votings out of the votes
-      {% if inputs.num_votes == 'all' %}
+      print("Getting vortings...")
       dfvoting = dc.get_voting_of_votes(dfvotes.to_dict('records'), path)
-      {% else %}
-      dfvoting = dc.get_voting_of_votes(dfvotes.head({{ inputs.num_votes }}).to_dict('records'), path)
-      {% endif %}
 
-      # Dropping columns, cleaning up
-      dfvoting = dt.clean_up_voting(dfvoting)
+      dfvoting.to_csv(f"{FILE_PATH}/votings_{since}_{until}_{now}.csv")
+      print(f"Got {len(dfvoting)} Votings")
 
-      di.ingest_data(
-          engine=engine,
-          target_table='voting',
-          chunksize={{ vars.chunksize }},
-          data = dfvoting
-      )
+      print("Uploading Votings")
+      gcsc.upload_to_gcs(f"{FILE_PATH}/votings_{since}_{until}_{now}.csv", CHUNK_SIZE)
 
-      dfvoting.to_pickle('dfvoting.pkl')
-
-      print("Finished Ingesting Votings")
-
-  - id: aggregate_party_summary
-    type: io.kestra.plugin.scripts.python.Script
-    inputFiles:
-      dfvoting.pkl: "{{ outputs.ingest_voting.outputFiles['dfvoting.pkl'] }}"
-    script: |
-      import swissparlpy as spp
-      import pandas as pd
-      from sqlalchemy import create_engine
-      import os
-
-      import datatransform as dt
-      import dataingest as di
-
-      # We get the pickel from the last task and stick it into a dataframe
-      dfvoting = pd.read_pickle('dfvoting.pkl')
-
-      # PostgreSQL Database
-      engine = create_engine('{{ vars.db_url }}')
-
-      # We aggregate the party summary...
-      dfpartysummary = dt.create_party_summary(dfvoting)
-
-      # ...and ingest it into our database
-      di.ingest_data(
-          engine=engine,
-          target_table='partysummary',
-          chunksize={{ vars.chunksize }},
-          data = dfpartysummary
-      )
-
-      print("Finished Ingesting Party Summary")
+      print("Finished UPLOADING Votings")
 
 pluginDefaults:
   - type: io.kestra.plugin.scripts.python.Script
     values:
       taskRunner:
         type: io.kestra.plugin.scripts.runner.docker.Docker
+        env:
+          GOOGLE_CREDENTIALS: "{{ envs.GOOGLE_CREDENTIALS }}"
+          PROJECT_NAME: "{{ envs.PROJECT_NAME }}"
+          BUCKET_NAME: "{{ envs.BUCKET_NAME }}"
         networkMode: deng_default
         pullPolicy: NEVER
-      containerImage: openparl-kestra:latest
+      containerImage: openparl-python:latest
       inputFiles:
         dataingest.py: "file:///app/scripts/dataingest.py"
         datatransform.py: "file:///app/scripts/datatransform.py"

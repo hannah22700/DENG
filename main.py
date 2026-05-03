@@ -1,65 +1,54 @@
 import os
-
-import click
 import pandas as pd
-from sqlalchemy import create_engine
-
 import scripts.dataconnector as dc
 import scripts.dataingest as di
-import scripts.datatransform as dt
+from dotenv import load_dotenv
+from datetime import datetime
 
+load_dotenv()
 
-@click.command()
-@click.option("--pg-user", default="root", help="PostgreSQL username")
-@click.option("--pg-pass", default="root", help="PostgreSQL password")
-@click.option("--pg-host", default="localhost", help="PostgreSQL host")
-@click.option("--pg-port", default="5432", help="PostgreSQL port")
-@click.option("--pg-db", default="openparl", help="PostgreSQL database name")
-@click.option("--chunksize", default=100000, type=int, help="Chunk size for ingestion")
-@click.option("--voteCount", default=100, type=int, help="Number of votes to get votings for")
-def main(pg_user, pg_pass, pg_host, pg_port, pg_db, chunksize, votecount):
+FILE_PATH = "output"
+CREDENTIALS_FILE = os.getenv("GOOGLE_CREDENTIALS")
+PROJECT_NAME = os.getenv("PROJECT_NAME")
+BUCKET_NAME = os.getenv("BUCKET_NAME")
+CHUNK_SIZE = 8 * 1024 * 1024
+
+since = "2026.03.12"
+until = "2026.04.03"
+now = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+def main():
+    os.makedirs(FILE_PATH, exist_ok=True)
+
+    gcsc = di.gcs_connector(CREDENTIALS_FILE, BUCKET_NAME)
+
     print("Starting Pipeline")
-    engine = create_engine(
-        f"postgresql://{pg_user}:{pg_pass}@{pg_host}:{pg_port}/{pg_db}"
-    )
 
     __location__ = os.path.realpath(os.getcwd())
     path = os.path.join(__location__, "voting")
 
     print("Getting votes...")
-    votes = dc.get_votes()
+    votes = dc.get_votes(since, until)
 
     dfvotes = pd.DataFrame(votes)
-    dfvotes = dt.clean_up_votes(dfvotes)
 
-    di.ingest_data(
-        engine=engine, target_table="votes", chunksize=chunksize, data=dfvotes
-    )
+    print(f"Got {len(dfvotes)} Votes")
+    
+    dfvotes.to_csv(f"{FILE_PATH}/votes_{since}_{until}_{now}.csv")
 
-    print("Finished Ingesting Votes")
+    print("Uploading Votes")
+    gcsc.upload_to_gcs(f"{FILE_PATH}/votes_{since}_{until}_{now}.csv", CHUNK_SIZE)
 
-    print("Gettting vortings")
-    dfvoting = dc.get_voting_of_votes(votes[:votecount], path)
-    dfvoting = dt.clean_up_voting(dfvoting)
 
-    di.ingest_data(
-        engine=engine, target_table="voting", chunksize=chunksize, data=dfvoting
-    )
+    print("Getting vortings...")
+    dfvoting = dc.get_voting_of_votes(votes, path)
 
-    print("Finished Ingesting Votings")
+    dfvoting.to_csv(f"{FILE_PATH}/votings_{since}_{until}_{now}.csv")
+    print(f"Got {len(dfvoting)} Votings")
 
-    print("Creating Party summary")
+    print("Uploading Votings")
+    gcsc.upload_to_gcs(f"{FILE_PATH}/votings_{since}_{until}_{now}.csv", CHUNK_SIZE)
 
-    dfpartysummary = dt.create_party_summary(dfvoting)
-
-    di.ingest_data(
-        engine=engine,
-        target_table="partysummary",
-        chunksize=chunksize,
-        data=dfpartysummary,
-    )
-
-    print("Finished Ingesting Party Summary")
 
 
 if __name__ == "__main__":

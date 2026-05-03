@@ -1,6 +1,4 @@
 volumes:
-  openparl_postgres_data:
-    driver: local
   kestra_postgres_data:
     driver: local
   kestra_data:
@@ -9,37 +7,6 @@ volumes:
     driver: local
 
 services:
-  pgdatabase:
-    image: postgres:18
-    environment:
-      POSTGRES_USER: root
-      POSTGRES_PASSWORD: root
-      POSTGRES_DB: openparl
-    ports:
-      - "5432:5432"
-    volumes:
-      - openparl_postgres_data:/var/lib/postgresql
-    depends_on:
-      kestra:
-        condition: service_started
-
-  openparl-python:
-    build:
-      context: .
-      dockerfile: Dockerfile.kestra
-    image: openparl-kestra:latest
-
-  pgadmin:
-    image: dpage/pgadmin4
-    environment:
-      - PGADMIN_DEFAULT_EMAIL=admin@admin.com
-      - PGADMIN_DEFAULT_PASSWORD=root
-    ports:
-      - "8085:80"
-    depends_on:
-      pgdatabase:
-        condition: service_started
-
   kestra_postgres:
     image: postgres:18
     volumes:
@@ -56,6 +23,8 @@ services:
 
   kestra:
     image: kestra/kestra:v1.1
+    env_file:
+      - .env
     pull_policy: always
     user: "root"
     command: server standalone --flow-path /app/flows
@@ -63,6 +32,7 @@ services:
       - kestra_data:/app/storage
       - /var/run/docker.sock:/var/run/docker.sock
       - kestra_tmp:/tmp/kestra-wd
+      - ${GOOGLE_CREDENTIALS}:${GOOGLE_CREDENTIALS}
       - ./scripts:/app/scripts # We mount the scripts folder into /app/scripts
       - ./flows:/app/flows # We mount our flows folder, so user doesn't have to import manually
     environment:
@@ -74,6 +44,8 @@ services:
             username: kestra
             password: k3str4
         kestra:
+          variables:
+            env-vars-prefix: ""  
           tutorial-flows:
             enabled: false
           server:
@@ -101,3 +73,9 @@ services:
     depends_on:
       kestra_postgres:
         condition: service_started
+
+  kestra-python-runtime:
+    build:
+      context: .
+      dockerfile: Dockerfile.kestra
+    image: openparl-python:latest

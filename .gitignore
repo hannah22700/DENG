@@ -5,7 +5,10 @@ __pycache__/
 .vscode 
 
 .venv
+.env
 
+output
+voting
 
 .terraform/
 *.tfstate
