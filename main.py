@@ -8,9 +8,9 @@ from datetime import datetime
 load_dotenv()
 
 FILE_PATH = "output"
-CREDENTIALS_FILE = os.getenv("GOOGLE_CREDENTIALS")
-PROJECT_NAME = os.getenv("PROJECT_NAME")
-BUCKET_NAME = os.getenv("BUCKET_NAME")
+CREDENTIALS_FILE = os.getenv("ENV_GOOGLE_CREDENTIALS")
+PROJECT_NAME = os.getenv("ENV_PROJECT_NAME")
+BUCKET_NAME = os.getenv("ENV_BUCKET_NAME")
 CHUNK_SIZE = 8 * 1024 * 1024
 
 since = "2026.03.12"
@@ -39,15 +39,17 @@ def main():
     print("Uploading Votes")
     gcsc.upload_to_gcs(f"{FILE_PATH}/votes_{since}_{until}_{now}.csv", CHUNK_SIZE)
 
+    if(len(dfvotes) > 0):
+        print("Getting vortings...")
+        dfvoting = dc.get_voting_of_votes(votes, path)
 
-    print("Getting vortings...")
-    dfvoting = dc.get_voting_of_votes(votes, path)
+        dfvoting.to_csv(f"{FILE_PATH}/votings_{since}_{until}_{now}.csv")
+        print(f"Got {len(dfvoting)} Votings")
 
-    dfvoting.to_csv(f"{FILE_PATH}/votings_{since}_{until}_{now}.csv")
-    print(f"Got {len(dfvoting)} Votings")
-
-    print("Uploading Votings")
-    gcsc.upload_to_gcs(f"{FILE_PATH}/votings_{since}_{until}_{now}.csv", CHUNK_SIZE)
+        print("Uploading Votings")
+        gcsc.upload_to_gcs(f"{FILE_PATH}/votings_{since}_{until}_{now}.csv", CHUNK_SIZE)
+    else:
+        print("No votings to ingest")
 
 
 

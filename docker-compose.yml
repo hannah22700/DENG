@@ -32,7 +32,7 @@ services:
       - kestra_data:/app/storage
       - /var/run/docker.sock:/var/run/docker.sock
       - kestra_tmp:/tmp/kestra-wd
-      - ${GOOGLE_CREDENTIALS}:${GOOGLE_CREDENTIALS}
+      - ${ENV_GOOGLE_CREDENTIALS}:${ENV_GOOGLE_CREDENTIALS}
       - ./scripts:/app/scripts # We mount the scripts folder into /app/scripts
       - ./flows:/app/flows # We mount our flows folder, so user doesn't have to import manually
     environment:
@@ -43,9 +43,7 @@ services:
             driverClassName: org.postgresql.Driver
             username: kestra
             password: k3str4
-        kestra:
-          variables:
-            env-vars-prefix: ""  
+        kestra: 
           tutorial-flows:
             enabled: false
           server:
@@ -67,6 +65,7 @@ services:
           local-files:
             allowed-paths:
               - /app/scripts
+              - ${ENV_GOOGLE_CREDENTIALS}
     ports:
       - "8080:8080"
       - "8081:8081"

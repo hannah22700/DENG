@@ -33,8 +33,11 @@ tasks:
       PROJECT_NAME = os.getenv("PROJECT_NAME")
       BUCKET_NAME = os.getenv("BUCKET_NAME")
       FILE_PATH = "{{ vars.filepath }}"
-      CHUNKSIZE = "{{ vars.chunksize }}"
+      CHUNKSIZE = {{ vars.chunksize }}
       now = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+      since = "{{ inputs.since }}"
+      until = "{{ inputs.until }}"
 
 
       os.makedirs(FILE_PATH, exist_ok=True)
@@ -66,6 +69,7 @@ tasks:
     type: io.kestra.plugin.scripts.python.Script
     inputFiles:
       votes.pkl: "{{ outputs.ingest_votes.outputFiles['votes.pkl'] }}"
+      google-key.json: "file:///{{envs.google_credentials}}"
     outputFiles:
       - "*.pkl"
     script: |
@@ -74,13 +78,14 @@ tasks:
       import pandas as pd
       import os
       from datetime import datetime
+      from pathlib import Path
       now = datetime.now().strftime("%Y%m%d_%H%M%S") 
 
       CREDENTIALS_FILE = os.getenv("GOOGLE_CREDENTIALS")
       PROJECT_NAME = os.getenv("PROJECT_NAME")
       BUCKET_NAME = os.getenv("BUCKET_NAME")
-      FILEPATH = "{{ vars.filepath }}"
-      CHUNKSIZE = "{{ vars.chunksize }}"
+      FILE_PATH = "{{ vars.filepath }}"
+      CHUNKSIZE = {{ vars.chunksize }}
 
       since = "{{ inputs.since }}"
       until = "{{ inputs.until }}"
@@ -95,29 +100,27 @@ tasks:
       __location__ = os.path.realpath(os.getcwd())
       path = os.path.join(__location__, "voting")
 
-      # Get the votes from the pickle file (output of last task)
       dfvotes = pd.read_pickle('votes.pkl')
 
-      print("Getting vortings...")
-      dfvoting = dc.get_voting_of_votes(dfvotes.to_dict('records'), path)
+      if(len(dfvotes) > 0):
+        print("Getting vortings...")
+        dfvoting = dc.get_voting_of_votes(dfvotes.to_dict('records'), path)
 
-      dfvoting.to_csv(f"{FILE_PATH}/votings_{since}_{until}_{now}.csv")
-      print(f"Got {len(dfvoting)} Votings")
+        dfvoting.to_csv(f"{FILE_PATH}/votings_{since}_{until}_{now}.csv")
+        print(f"Got {len(dfvoting)} Votings")
 
-      print("Uploading Votings")
-      gcsc.upload_to_gcs(f"{FILE_PATH}/votings_{since}_{until}_{now}.csv", CHUNK_SIZE)
+        print("Uploading Votings")
+        gcsc.upload_to_gcs(f"{FILE_PATH}/votings_{since}_{until}_{now}.csv", CHUNKSIZE)
 
-      print("Finished UPLOADING Votings")
+        print("Finished UPLOADING Votings")
+      else:
+        print("No votings to ingest")
 
 pluginDefaults:
   - type: io.kestra.plugin.scripts.python.Script
     values:
       taskRunner:
         type: io.kestra.plugin.scripts.runner.docker.Docker
-        env:
-          GOOGLE_CREDENTIALS: "{{ envs.GOOGLE_CREDENTIALS }}"
-          PROJECT_NAME: "{{ envs.PROJECT_NAME }}"
-          BUCKET_NAME: "{{ envs.BUCKET_NAME }}"
         networkMode: deng_default
         pullPolicy: NEVER
       containerImage: openparl-python:latest
@@ -125,8 +128,16 @@ pluginDefaults:
         dataingest.py: "file:///app/scripts/dataingest.py"
         datatransform.py: "file:///app/scripts/datatransform.py"
         dataconnector.py: "file:///app/scripts/dataconnector.py"
+        google-key.json: "file:///{{envs.google_credentials}}"
+      env:
+        GOOGLE_CREDENTIALS: google-key.json
+        PROJECT_NAME: "{{ envs.project_name }}"
+        BUCKET_NAME: "{{ envs.bucket_name }}"
 
 triggers:
   - id: weekly_schedule
     type: io.kestra.plugin.core.trigger.Schedule
     cron: "0 6 * * 1" # Every Monday, 6 AM
+    inputs:
+      since: "{{ now() | dateAdd(-7, 'DAYS') | date('yyyy-MM-dd') }}"
+      until: "{{ now() | date('yyyy-MM-dd') }}"
