@@ -5,4 +5,4 @@ FROM python:3.13
 RUN pip install --upgrade pip
 
 # Install dependencies
-RUN pip install --no-cache-dir kestra requests pandas swissparlpy google-cloud-storage
+RUN pip install --no-cache-dir kestra requests pandas swissparlpy google-cloud-storage google-cloud-bigquery pyarrow pandas-gbq

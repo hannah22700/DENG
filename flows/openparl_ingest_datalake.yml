@@ -1,4 +1,4 @@
-id: openparl_ingest
+id: openparl_ingest_datalake
 namespace: deng
 description: |
   Fetches votes and voting data from the Swiss Parliament API (swissparlpy)
@@ -103,7 +103,7 @@ tasks:
       dfvotes = pd.read_pickle('votes.pkl')
 
       if(len(dfvotes) > 0):
-        print("Getting vortings...")
+        print("Getting votings...")
         dfvoting = dc.get_voting_of_votes(dfvotes.to_dict('records'), path)
 
         dfvoting.to_csv(f"{FILE_PATH}/votings_{since}_{until}_{now}.csv")

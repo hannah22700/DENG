@@ -1,0 +1,73 @@
+id: openparl_ingest_bigquery
+namespace: deng
+description: |
+  Downloads files from Google Cloud Storage, and ingests it into a Big Query Database
+
+# Sharing resources across our different tasks
+
+inputs:
+  - id: date
+    type: DATE
+    displayName: Select the date of the ingest
+
+tasks:
+  - id: stage_data
+    type: io.kestra.plugin.scripts.python.Script
+    script: |
+      import os
+      import pandas as pd
+      import dataingest as di
+      from io import StringIO
+
+      CREDENTIALS_FILE = os.getenv("GOOGLE_CREDENTIALS")
+      PROJECT_NAME = os.getenv("ENV_PROJECT_NAME")
+      BUCKET_NAME = os.getenv("ENV_BUCKET_NAME")
+      BIGQUERY_NAME = os.getenv("ENV_BIGQUERY_NAME")
+
+      date = "{{ inputs.date }}"
+
+      def main():
+
+          print("Starting Pipeline")
+          gcsc = di.gcs_connector(CREDENTIALS_FILE, BUCKET_NAME)
+          gbq = di.gbq_connector(CREDENTIALS_FILE,BIGQUERY_NAME, PROJECT_NAME)
+
+          blobs = gcsc.get_blobs()
+
+          for blob in blobs:
+              tablename = blob.name.split("_")[0]
+              blobdate = blob.name.split("_")[3]
+
+              if (date.replace(".","")  == blobdate ):
+                  data = gcsc.get_from_gcs(blob.name)
+                  
+                  df = pd.read_csv(StringIO(data))
+
+                  gbq.load_data(df, f"stg_{tablename}")
+                  print(f"Staged {tablename} from {date}")
+
+pluginDefaults:
+  - type: io.kestra.plugin.scripts.python.Script
+    values:
+      taskRunner:
+        type: io.kestra.plugin.scripts.runner.docker.Docker
+        networkMode: deng_default
+        pullPolicy: NEVER
+      containerImage: openparl-python:latest
+      inputFiles:
+        dataingest.py: "file:///app/scripts/dataingest.py"
+        datatransform.py: "file:///app/scripts/datatransform.py"
+        dataconnector.py: "file:///app/scripts/dataconnector.py"
+        google-key.json: "file:///{{envs.google_credentials}}"
+      env:
+        GOOGLE_CREDENTIALS: google-key.json
+        PROJECT_NAME: "{{ envs.project_name }}"
+        BUCKET_NAME: "{{ envs.bucket_name }}"
+        BIGQUERY_NAME: "{{envs.bigquery_name}}"
+
+triggers:
+  - id: weekly_schedule
+    type: io.kestra.plugin.core.trigger.Schedule
+    cron: "0 8 * * 1" # Every Monday, 6 AM
+    inputs:
+      date: "{{ now() | date('yyyy-MM-dd') }}"

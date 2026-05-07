@@ -40,7 +40,7 @@ def main():
     gcsc.upload_to_gcs(f"{FILE_PATH}/votes_{since}_{until}_{now}.csv", CHUNK_SIZE)
 
     if(len(dfvotes) > 0):
-        print("Getting vortings...")
+        print("Getting votings...")
         dfvoting = dc.get_voting_of_votes(votes, path)
 
         dfvoting.to_csv(f"{FILE_PATH}/votings_{since}_{until}_{now}.csv")
