@@ -6,22 +6,22 @@ The directory structure and our importan files are liste here:
 
 ```
 .
-├── diagrams                # Contains Diagrams for documentation
-├── flows                   # Contains Kestra Flows
-│   └── openparl_ingest.yml # Kestra Flow
-├── media                   # Contains Images for documentation
-├── scripts                 # Contains Scripts for the main.py and for the kestra flows
-│   ├── dataconnector.py    # Data Extraction
-│   ├── dataingest.py       # Data Ingestion
-│   └── datatransform.py    # Data Transformation
-├── sql                     # Contains sample SQL Scripts
-├── docker-compose.yml      # Docker Compose file
-├── Dockerfile.kestra       # Docker file for Kestra that installs dependencies
-├── main.py                 # Main pipeline
-├── persona.md              # description of our persona
-├── pyproject.toml          # virtual environment configuration
-├── README.md               # README
-└── uv.lock                 # virtaul environment configuration
+├── diagrams                            # Contains Diagrams for documentation
+├── flows                               # Contains Kestra Flows
+│   └── openparl_ingest_datalake.yml    # Kestra Flow
+│   └── openparl_ingest_bigquery.yml    # Kestra Flow
+├── media                               # Contains Images for documentation
+├── scripts                             # Contains Scripts for the main.py and for the kestra flows
+│   ├── dataconnector.py                # Data Extraction
+│   ├── dataingest.py                   # Data Ingestion
+├── sql                                 # Contains sample SQL Scripts
+├── docker-compose.yml                  # Docker Compose file
+├── Dockerfile.kestra                   # Docker file for Kestra that installs dependencies
+├── main.py                             # Main pipeline
+├── persona.md                          # description of our persona
+├── pyproject.toml                      # virtual environment configuration
+├── README.md                           # README
+└── uv.lock                             # virtaul environment configuration
 ```
 
 ## Instructions to start pipeline

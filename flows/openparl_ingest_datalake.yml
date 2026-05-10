@@ -54,67 +54,76 @@ tasks:
 
       dfvotes = pd.DataFrame(votes)
 
-      print(f"Got {len(dfvotes)} Votes")
+      if (len(dfvotes) == 0):
+        print("No votes to ingest")
 
-      dfvotes.to_csv(f"{FILE_PATH}/votes_{since}_{until}_{now}.csv")
-
-      print("Uploading Votes")
-      gcsc.upload_to_gcs(f"{FILE_PATH}/votes_{since}_{until}_{now}.csv", CHUNKSIZE)
-
-      dfvotes.to_pickle('votes.pkl')
-
-      print("Finished Uploading Votes")
-
-  - id: ingest_voting
-    type: io.kestra.plugin.scripts.python.Script
-    inputFiles:
-      votes.pkl: "{{ outputs.ingest_votes.outputFiles['votes.pkl'] }}"
-      google-key.json: "file:///{{envs.google_credentials}}"
-    outputFiles:
-      - "*.pkl"
-    script: |
-      import dataconnector as dc
-      import dataingest as di
-      import pandas as pd
-      import os
-      from datetime import datetime
-      from pathlib import Path
-      now = datetime.now().strftime("%Y%m%d_%H%M%S") 
-
-      CREDENTIALS_FILE = os.getenv("GOOGLE_CREDENTIALS")
-      PROJECT_NAME = os.getenv("PROJECT_NAME")
-      BUCKET_NAME = os.getenv("BUCKET_NAME")
-      FILE_PATH = "{{ vars.filepath }}"
-      CHUNKSIZE = {{ vars.chunksize }}
-
-      since = "{{ inputs.since }}"
-      until = "{{ inputs.until }}"
-
-
-      os.makedirs(FILE_PATH, exist_ok=True)
-
-      gcsc = di.gcs_connector(CREDENTIALS_FILE, BUCKET_NAME)
-
-      print("Starting Pipeline")
-
-      __location__ = os.path.realpath(os.getcwd())
-      path = os.path.join(__location__, "voting")
-
-      dfvotes = pd.read_pickle('votes.pkl')
-
-      if(len(dfvotes) > 0):
-        print("Getting votings...")
-        dfvoting = dc.get_voting_of_votes(dfvotes.to_dict('records'), path)
-
-        dfvoting.to_csv(f"{FILE_PATH}/votings_{since}_{until}_{now}.csv")
-        print(f"Got {len(dfvoting)} Votings")
-
-        print("Uploading Votings")
-        gcsc.upload_to_gcs(f"{FILE_PATH}/votings_{since}_{until}_{now}.csv", CHUNKSIZE)
-
-        print("Finished UPLOADING Votings")
       else:
-        print("No votings to ingest")
+        print(f"Got {len(dfvotes)} Votes")
+
+        dfvotes.to_csv(f"{FILE_PATH}/votes_{since}_{until}_{now}.csv")
+
+        print("Uploading Votes")
+        gcsc.upload_to_gcs(f"{FILE_PATH}/votes_{since}_{until}_{now}.csv", CHUNKSIZE)
+
+        dfvotes.to_pickle('votes.pkl')
+
+        print("Finished Uploading Votes")
+
+  - id: votes_exist
+    type: io.kestra.plugin.core.flow.If
+    condition: "{{ outputs.ingest_votes.outputFiles['votes.pkl']  is defined }}"
+    then:
+      - id: ingest_voting
+        type: io.kestra.plugin.scripts.python.Script
+        inputFiles:
+          votes.pkl: "{{ outputs.ingest_votes.outputFiles['votes.pkl'] }}"
+          google-key.json: "file:///{{envs.google_credentials}}"
+        outputFiles:
+          - "*.pkl"
+
+        script: |
+          import dataconnector as dc
+          import dataingest as di
+          import pandas as pd
+          import os
+          from datetime import datetime
+          from pathlib import Path
+          now = datetime.now().strftime("%Y%m%d_%H%M%S") 
+
+          CREDENTIALS_FILE = os.getenv("GOOGLE_CREDENTIALS")
+          PROJECT_NAME = os.getenv("PROJECT_NAME")
+          BUCKET_NAME = os.getenv("BUCKET_NAME")
+          FILE_PATH = "{{ vars.filepath }}"
+          CHUNKSIZE = {{ vars.chunksize }}
+
+          since = "{{ inputs.since }}"
+          until = "{{ inputs.until }}"
+
+
+          os.makedirs(FILE_PATH, exist_ok=True)
+
+          gcsc = di.gcs_connector(CREDENTIALS_FILE, BUCKET_NAME)
+
+          print("Starting Pipeline")
+
+          __location__ = os.path.realpath(os.getcwd())
+          path = os.path.join(__location__, "voting")
+
+          dfvotes = pd.read_pickle('votes.pkl')
+
+          if(len(dfvotes) > 0):
+            print("Getting votings...")
+            dfvoting = dc.get_voting_of_votes(dfvotes.to_dict('records'), path)
+
+            dfvoting.to_csv(f"{FILE_PATH}/votings_{since}_{until}_{now}.csv")
+            print(f"Got {len(dfvoting)} Votings")
+
+            print("Uploading Votings")
+            gcsc.upload_to_gcs(f"{FILE_PATH}/votings_{since}_{until}_{now}.csv", CHUNKSIZE)
+
+            print("Finished UPLOADING Votings")
+          else:
+            print("No votings to ingest")
 
 pluginDefaults:
   - type: io.kestra.plugin.scripts.python.Script

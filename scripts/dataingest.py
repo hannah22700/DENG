@@ -54,8 +54,12 @@ class gbq_connector:
 
     
      def load_data(self, df, table):
+        job_config = bigquery.LoadJobConfig(
+            write_disposition=bigquery.WriteDisposition.WRITE_TRUNCATE
+        )
+
         table_id = f"{self.projecname}.{self.datasetname}.{table}"
-        job = self.client.load_table_from_dataframe(df, table_id)
+        job = self.client.load_table_from_dataframe(df, table_id, job_config)
 
 
         return job.result()
