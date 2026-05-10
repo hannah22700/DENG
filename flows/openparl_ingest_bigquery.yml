@@ -49,28 +49,6 @@ tasks:
 
       print("Finished Staging")
 
-  - id: create_votes
-    type: io.kestra.plugin.gcp.bigquery.Query
-    sql: |
-      CREATE TABLE IF NOT EXISTS `{{ envs.bigquery_name }}.votes` (
-        ID INT64,
-        RegistrationNumber INT64,
-        BusinessNumber INT64,
-        BusinessShortNumber FLOAT64,
-        BusinessTitle STRING,
-        BusinessAuthor STRING,
-        BillNumber INT64,
-        BillTitle STRING,
-        IdLegislativePeriod INT64,
-        IdSession INT64,
-        SessionName STRING,
-        Subject STRING,
-        MeaningYes STRING,
-        MeaningNo STRING,
-        VoteEnd STRING,
-        VoteEndWithTimezone STRING
-      )
-
   - id: transform_votes
     type: io.kestra.plugin.gcp.bigquery.Query
     projectId: "{{envs.project_name}}"
@@ -118,37 +96,6 @@ tasks:
               S.VoteEnd,
               S.VoteEndWithTimezone
       );
-
-  - id: create_votings
-    type: io.kestra.plugin.gcp.bigquery.Query
-    sql: |
-      CREATE TABLE IF NOT EXISTS `{{ envs.bigquery_name }}.votings` (
-        ID INT64,
-        IdVote INT64,
-        RegistrationNumber INT64,
-        PersonNumber INT64,
-        FirstName STRING,
-        LastName STRING,
-        Canton STRING,
-        CantonName STRING,
-        ParlGroupCode STRING,
-        ParlGroupName STRING,
-        ParlGroupNameAbbreviation STRING,
-        Decision INT64,
-        DecisionText STRING,
-        BusinessNumber INT64,
-        BusinessShortNumber FLOAT64,
-        BusinessTitle STRING,
-        BillTitle STRING,
-        IdLegislativePeriod INT64,
-        IdSession INT64,
-        VoteEnd STRING,
-        MeaningYes STRING,
-        MeaningNo STRING,
-        CantonID INT64,
-        Subject STRING,
-        VoteEndWithTimezone STRING
-      )
 
   - id: transform_votings
     type: io.kestra.plugin.gcp.bigquery.Query
