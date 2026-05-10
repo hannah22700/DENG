@@ -32,7 +32,29 @@ resource "google_storage_bucket" "bucket" {
 
 
 resource "google_bigquery_dataset" "dataset" {
-  dataset_id = var.bq_dataset_name
-  location   = var.location
+  dataset_id                 = var.bq_dataset_name
+  location                   = var.location
+  delete_contents_on_destroy = true
 }
 
+
+resource "google_bigquery_table" "votes" {
+  dataset_id          = google_bigquery_dataset.dataset.dataset_id
+  table_id            = "votes"
+  schema              = file("${path.module}/schemas/votes.json")
+  deletion_protection = false
+}
+
+resource "google_bigquery_table" "votings" {
+  dataset_id          = google_bigquery_dataset.dataset.dataset_id
+  table_id            = "votings"
+  schema              = file("${path.module}/schemas/votings.json")
+  deletion_protection = false
+}
+
+resource "google_bigquery_table" "partysummary" {
+  dataset_id          = google_bigquery_dataset.dataset.dataset_id
+  table_id            = "partysummary"
+  schema              = file("${path.module}/schemas/partysummary.json")
+  deletion_protection = false
+}
