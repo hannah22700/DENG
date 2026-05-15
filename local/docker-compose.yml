@@ -12,8 +12,8 @@ services:
   pgdatabase:
     image: postgres:18
     environment:
-      POSTGRES_USER: ${ENV_POSTGRES_USERNAME}
-      POSTGRES_PASSWORD: ${ENV_POSTGRES_PASSWORD}
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: root
       POSTGRES_DB: openparl
     ports:
       - "5432:5432"
@@ -22,26 +22,32 @@ services:
     depends_on:
       kestra:
         condition: service_started
+
+  openparl-python:
+    build:
+      context: .
+      dockerfile: Dockerfile.kestra
+    image: openparl-kestra:latest
+
   pgadmin:
     image: dpage/pgadmin4
     environment:
-      - PGADMIN_DEFAULT_EMAIL=${PGADMIN_DEFAULT_EMAIL}
-      - PGADMIN_DEFAULT_PASSWORD=${PGADMIN_DEFAULT_PASSWORD}
+      - PGADMIN_DEFAULT_EMAIL=admin@admin.com
+      - PGADMIN_DEFAULT_PASSWORD=root
     ports:
       - "8085:80"
     depends_on:
       pgdatabase:
         condition: service_started
+
   kestra_postgres:
-    env_file:
-      - .env
     image: postgres:18
     volumes:
       - kestra_postgres_data:/var/lib/postgresql
     environment:
       POSTGRES_DB: kestra
-      POSTGRES_USER: ${KESTRA_POSTGRES_USERNAME}
-      POSTGRES_PASSWORD: ${KESTRA_POSTGRES_PASSWORD}
+      POSTGRES_USER: kestra
+      POSTGRES_PASSWORD: k3str4
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -d $${POSTGRES_DB} -U $${POSTGRES_USER}"]
       interval: 30s
@@ -50,8 +56,6 @@ services:
 
   kestra:
     image: kestra/kestra:v1.1
-    env_file:
-      - .env
     pull_policy: always
     user: "root"
     command: server standalone --flow-path /app/flows
@@ -59,25 +63,23 @@ services:
       - kestra_data:/app/storage
       - /var/run/docker.sock:/var/run/docker.sock
       - kestra_tmp:/tmp/kestra-wd
-      - ${ENV_GOOGLE_CREDENTIALS}:${ENV_GOOGLE_CREDENTIALS}
       - ./scripts:/app/scripts # We mount the scripts folder into /app/scripts
       - ./flows:/app/flows # We mount our flows folder, so user doesn't have to import manually
     environment:
-      GOOGLE_APPLICATION_CREDENTIALS: ${ENV_GOOGLE_CREDENTIALS}
       KESTRA_CONFIGURATION: |
         datasources:
           postgres:
             url: jdbc:postgresql://kestra_postgres:5432/kestra
             driverClassName: org.postgresql.Driver
-            username: ${KESTRA_POSTGRES_USERNAME}
-            password: ${KESTRA_POSTGRES_PASSWORD}
-        kestra: 
+            username: kestra
+            password: k3str4
+        kestra:
           tutorial-flows:
             enabled: false
           server:
             basicAuth:
-              username: ${KESTRA_USERNAME}
-              password: ${KESTRA_PASSWORD}
+              username: "admin@kestra.io"
+              password: Admin1234!
           repository:
             type: postgres
           storage:
@@ -93,22 +95,9 @@ services:
           local-files:
             allowed-paths:
               - /app/scripts
-              - ${ENV_GOOGLE_CREDENTIALS}
     ports:
       - "8080:8080"
       - "8081:8081"
     depends_on:
       kestra_postgres:
         condition: service_started
-
-  kestra-python-runtime-local:
-    build:
-      context: .
-      dockerfile: Dockerfile_local.kestra
-    image: openparl-python-local:latest
-
-  kestra-python-runtime-cloud:
-    build:
-      context: .
-      dockerfile: Dockerfile_cloud.kestra
-    image: openparl-python-cloud:latest

@@ -1,0 +1,258 @@
+id: openparl_ingest_bigquery
+namespace: deng
+description: |
+  Downloads files from Google Cloud Storage, and ingests it into a Big Query Database
+
+# Sharing resources across our different tasks
+
+inputs:
+  - id: date
+    type: DATE
+    displayName: Select the date of the ingest
+
+tasks:
+  - id: stage_data
+    type: io.kestra.plugin.scripts.python.Script
+    script: |
+      import os
+      import pandas as pd
+      import clouddataingest as di
+      from io import StringIO
+
+      CREDENTIALS_FILE = os.getenv("GOOGLE_CREDENTIALS")
+      PROJECT_NAME = os.getenv("PROJECT_NAME")
+      BUCKET_NAME = os.getenv("BUCKET_NAME")
+      BIGQUERY_NAME = os.getenv("BIGQUERY_NAME")
+
+      date = "{{ inputs.date }}"
+
+      print("Starting Pipeline")
+      gcsc = di.gcs_connector(CREDENTIALS_FILE, BUCKET_NAME)
+      gbq = di.gbq_connector(CREDENTIALS_FILE,BIGQUERY_NAME, PROJECT_NAME)
+
+      blobs = gcsc.get_blobs()
+
+      for blob in blobs:
+          tablename = blob.name.split("_")[0]
+          blobdate = blob.name.split("_")[3]
+
+          if (date.replace("-","")  == blobdate ):
+              data = gcsc.get_from_gcs(blob.name)
+              
+              df = pd.read_csv(StringIO(data))
+
+              gbq.load_data(df, f"stg_{tablename}")
+              print(f"Staged {tablename} from {date}")
+          else:
+            print(f"Blob {blob.name} not relevant")
+
+
+      print("Finished Staging")
+
+  - id: transform_votes
+    type: io.kestra.plugin.gcp.bigquery.Query
+    projectId: "{{envs.project_name}}"
+    location: EU
+
+    sql: |
+      MERGE `{{envs.project_name}}.{{ envs.bigquery_name }}.votes` T
+      USING `{{envs.project_name}}.{{ envs.bigquery_name }}.stg_votes` S
+      ON T.ID = S.ID
+
+      WHEN NOT MATCHED THEN
+      INSERT (
+              ID,
+              RegistrationNumber,
+              BusinessNumber,
+              BusinessShortNumber,
+              BusinessTitle,
+              BusinessAuthor,
+              BillNumber,
+              BillTitle,
+              IdLegislativePeriod,
+              IdSession,
+              SessionName,
+              Subject,
+              MeaningYes,
+              MeaningNo,
+              VoteEnd,
+              VoteEndWithTimezone
+      )
+      VALUES (
+              S.ID,
+              S.RegistrationNumber,
+              S.BusinessNumber,
+              S.BusinessShortNumber,
+              S.BusinessTitle,
+              S.BusinessAuthor,
+              S.BillNumber,
+              S.BillTitle,
+              S.IdLegislativePeriod,
+              S.IdSession,
+              S.SessionName,
+              S.Subject,
+              S.MeaningYes,
+              S.MeaningNo,
+              S.VoteEnd,
+              S.VoteEndWithTimezone
+      );
+
+  - id: transform_votings
+    type: io.kestra.plugin.gcp.bigquery.Query
+    projectId: "{{envs.project_name}}"
+    location: EU
+
+    sql: |
+      MERGE `{{envs.project_name}}.{{ envs.bigquery_name }}.votings` T
+      USING `{{envs.project_name}}.{{ envs.bigquery_name }}.stg_votings` S
+      ON T.ID = S.ID
+
+      WHEN NOT MATCHED THEN
+      INSERT (
+          ID,
+          IdVote,
+          RegistrationNumber,
+          PersonNumber,
+          FirstName,
+          LastName,
+          Canton,
+          CantonName,
+          ParlGroupCode,
+          ParlGroupName,
+          ParlGroupNameAbbreviation,
+          Decision,
+          DecisionText,
+          BusinessNumber,
+          BusinessShortNumber,
+          BusinessTitle,
+          BillTitle,
+          IdLegislativePeriod,
+          IdSession,
+          VoteEnd,
+          MeaningYes,
+          MeaningNo,
+          CantonID,
+          Subject,
+          VoteEndWithTimezone
+      )
+      VALUES (
+          S.ID,
+          S.IdVote,
+          S.RegistrationNumber,
+          S.PersonNumber,
+          S.FirstName,
+          S.LastName,
+          S.Canton,
+          S.CantonName,
+          S.ParlGroupCode,
+          S.ParlGroupName,
+          S.ParlGroupNameAbbreviation,
+          S.Decision,
+          S.DecisionText,
+          S.BusinessNumber,
+          S.BusinessShortNumber,
+          S.BusinessTitle,
+          S.BillTitle,
+          S.IdLegislativePeriod,
+          S.IdSession,
+          S.VoteEnd,
+          S.MeaningYes,
+          S.MeaningNo,
+          S.CantonID,
+          S.Subject,
+          S.VoteEndWithTimezone
+      );
+
+  - id: drop_staging
+    type: io.kestra.plugin.gcp.bigquery.Query
+    projectId: "{{envs.project_name}}"
+    location: EU
+    sql: |
+      DROP TABLE IF EXISTS `{{ envs.bigquery_name }}.stg_votes`;
+      DROP TABLE IF EXISTS `{{ envs.bigquery_name }}.stg_votings`;
+
+  - id: create_partysummary
+    type: io.kestra.plugin.gcp.bigquery.Query
+    projectId: "{{envs.project_name}}"
+    location: EU
+    sql: |
+      WITH base AS (
+        SELECT
+          BusinessTitle,
+          IdVote,
+          ParlGroupName,
+          DecisionText
+        FROM `{{envs.project_name}}.{{ envs.bigquery_name }}.votings`
+      ),
+
+      mode AS (
+        SELECT
+          BusinessTitle,
+          IdVote,
+          ParlGroupName,
+          APPROX_TOP_COUNT(DecisionText, 1)[OFFSET(0)].value AS DecisionText_mode
+        FROM base
+        GROUP BY BusinessTitle, IdVote, ParlGroupName
+      ),
+
+      counts AS (
+        SELECT
+          BusinessTitle,
+          IdVote,
+          ParlGroupName,
+
+          COUNTIF(DecisionText = 'Ja') AS YES,
+          COUNTIF(DecisionText = 'Nein') AS `NO`,
+          COUNTIF(DecisionText = 'Enthaltung') AS ABSTAIN,
+          COUNTIF(DecisionText = 'Hat nicht teilgenommen') AS ABSENT,
+          COUNTIF(DecisionText = 'Entschuldigt gemäss Art. 57 Abs. 4') AS EXCUSED,
+          COUNTIF(DecisionText = 'Die Präsidentin/der Präsident stimmt nicht') as PRESIDENT
+        FROM base
+        GROUP BY BusinessTitle, IdVote, ParlGroupName
+      )
+
+      SELECT
+        m.BusinessTitle,
+        m.IdVote,
+        m.ParlGroupName,
+        m.DecisionText_mode,
+
+        c.YES,
+        c.NO,
+        c.ABSTAIN,
+        c.ABSENT,
+
+        (c.YES + c.NO + c.ABSTAIN + c.ABSENT) AS TotalSeats
+      FROM mode m
+      JOIN counts c
+      USING (BusinessTitle, IdVote, ParlGroupName);
+
+    destinationTable: "{{envs.project_name}}.{{ envs.bigquery_name }}.partysummary"
+    writeDisposition: WRITE_TRUNCATE
+    createDisposition: CREATE_IF_NEEDED
+
+pluginDefaults:
+  - type: io.kestra.plugin.scripts.python.Script
+    values:
+      taskRunner:
+        type: io.kestra.plugin.scripts.runner.docker.Docker
+        networkMode: deng_default
+        pullPolicy: NEVER
+      containerImage: openparl-python-cloud:latest
+      inputFiles:
+        clouddataingest.py: "file:///app/scripts/clouddataingest.py"
+        datatransform.py: "file:///app/scripts/datatransform.py"
+        dataconnector.py: "file:///app/scripts/dataconnector.py"
+        google-key.json: "file:///{{envs.google_credentials}}"
+      env:
+        GOOGLE_CREDENTIALS: google-key.json
+        PROJECT_NAME: "{{ envs.project_name }}"
+        BUCKET_NAME: "{{ envs.bucket_name }}"
+        BIGQUERY_NAME: "{{ envs.bigquery_name }}"
+
+triggers:
+  - id: weekly_schedule
+    type: io.kestra.plugin.core.trigger.Schedule
+    cron: "0 8 * * 1" # Every Monday, 6 AM
+    inputs:
+      date: "{{ now() | date('yyyy-MM-dd') }}"

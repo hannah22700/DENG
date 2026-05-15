@@ -1,4 +1,4 @@
-id: openparl_ingest
+id: openparl_ingest_local
 namespace: deng
 description: |
   Fetches votes and voting data from the Swiss Parliament API (swissparlpy)
@@ -7,7 +7,7 @@ description: |
 
 # Sharing resources across our different tasks
 variables:
-  db_url: "postgresql://root:root@pgdatabase:5432/openparl"
+  db_url: "postgresql://{{ envs.postgres_username }}:{{ envs.postgres_password }}@pgdatabase:5432/openparl"
   chunksize: 100000
 
 inputs:
@@ -25,18 +25,24 @@ tasks:
     script: |
       import dataconnector as dc
       import datatransform as dt
-      import dataingest as di
+      import localdataingest as di
       import pandas as pd
       from sqlalchemy import create_engine
+
+      votecount = "{{ inputs.num_votes }}"
 
       # We create the access point to our database
       engine = create_engine('{{ vars.db_url }}')
 
       # We fetch the votes from the Swiss Parliament API
-      votes = dc.get_votes()
+
+      votes = dc.get_allVotes()
 
       # We stick them into a Pandas dataframe
-      dfvotes = pd.DataFrame(votes)
+      if votecount == "all":
+        dfvotes = pd.DataFrame(votes)
+      else:
+        dfvotes = pd.DataFrame(votes[:int(votecount)])
 
       # We drop languages, as we only use German version of votes
       dfvotes = dt.clean_up_votes(dfvotes)
@@ -64,8 +70,10 @@ tasks:
       import os
       import dataconnector as dc
       import datatransform as dt
-      import dataingest as di
+      import localdataingest as di
       from sqlalchemy import create_engine
+
+      votecount = "{{ inputs.num_votes }}"
 
       # We create the access point to our database
       engine = create_engine('{{ vars.db_url }}')
@@ -77,11 +85,11 @@ tasks:
       dfvotes = pd.read_pickle('votes.pkl')
 
       # We get the individual votings out of the votes
-      {% if inputs.num_votes == 'all' %}
-      dfvoting = dc.get_voting_of_votes(dfvotes.to_dict('records'), path)
-      {% else %}
-      dfvoting = dc.get_voting_of_votes(dfvotes.head({{ inputs.num_votes }}).to_dict('records'), path)
-      {% endif %}
+      if votecount == "all":
+        dfvoting = dc.get_voting_of_votes(dfvotes.to_dict('records'), path)
+      else:
+        dfvoting = dc.get_voting_of_votes(dfvotes.head({{ inputs.num_votes }}).to_dict('records'), path)
+
 
       # Dropping columns, cleaning up
       dfvoting = dt.clean_up_voting(dfvoting)
@@ -108,7 +116,7 @@ tasks:
       import os
 
       import datatransform as dt
-      import dataingest as di
+      import localdataingest as di
 
       # We get the pickel from the last task and stick it into a dataframe
       dfvoting = pd.read_pickle('dfvoting.pkl')
@@ -136,9 +144,9 @@ pluginDefaults:
         type: io.kestra.plugin.scripts.runner.docker.Docker
         networkMode: deng_default
         pullPolicy: NEVER
-      containerImage: openparl-kestra:latest
+      containerImage: openparl-python-local:latest
       inputFiles:
-        dataingest.py: "file:///app/scripts/dataingest.py"
+        localdataingest.py: "file:///app/scripts/localdataingest.py"
         datatransform.py: "file:///app/scripts/datatransform.py"
         dataconnector.py: "file:///app/scripts/dataconnector.py"
 

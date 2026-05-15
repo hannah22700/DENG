@@ -1,0 +1,152 @@
+id: openparl_ingest_datalake
+namespace: deng
+description: |
+  Fetches votes and voting data from the Swiss Parliament API (swissparlpy)
+  and writes them to Google Cloud Storag in csv format.
+
+# Sharing resources across our different tasks
+variables:
+  chunksize: 8388608
+  filepath: "output"
+
+inputs:
+  - id: since
+    type: DATE
+    displayName: Select the start date of the ingest
+  - id: until
+    type: DATE
+    displayName: Select the until date of the ingest
+
+tasks:
+  - id: ingest_votes
+    type: io.kestra.plugin.scripts.python.Script
+    outputFiles:
+      - "*.pkl"
+    script: |
+      import dataconnector as dc
+      import clouddataingest as di
+      import pandas as pd
+      import os
+      from datetime import datetime 
+
+      CREDENTIALS_FILE = os.getenv("GOOGLE_CREDENTIALS")
+      PROJECT_NAME = os.getenv("PROJECT_NAME")
+      BUCKET_NAME = os.getenv("BUCKET_NAME")
+      FILE_PATH = "{{ vars.filepath }}"
+      CHUNKSIZE = {{ vars.chunksize }}
+      now = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+      since = "{{ inputs.since }}"
+      until = "{{ inputs.until }}"
+
+
+      os.makedirs(FILE_PATH, exist_ok=True)
+
+      gcsc = di.gcs_connector(CREDENTIALS_FILE, BUCKET_NAME)
+
+      print("Starting Pipeline")
+
+      __location__ = os.path.realpath(os.getcwd())
+      path = os.path.join(__location__, "voting")
+
+      print("Getting votes...")
+      votes = dc.get_votes(since, until)
+
+      dfvotes = pd.DataFrame(votes)
+
+      if (len(dfvotes) == 0):
+        print("No votes to ingest")
+
+      else:
+        print(f"Got {len(dfvotes)} Votes")
+
+        dfvotes.to_csv(f"{FILE_PATH}/votes_{since}_{until}_{now}.csv")
+
+        print("Uploading Votes")
+        gcsc.upload_to_gcs(f"{FILE_PATH}/votes_{since}_{until}_{now}.csv", CHUNKSIZE)
+
+        dfvotes.to_pickle('votes.pkl')
+
+        print("Finished Uploading Votes")
+
+  - id: votes_exist
+    type: io.kestra.plugin.core.flow.If
+    condition: "{{ outputs.ingest_votes.outputFiles['votes.pkl']  is defined }}"
+    then:
+      - id: ingest_voting
+        type: io.kestra.plugin.scripts.python.Script
+        inputFiles:
+          votes.pkl: "{{ outputs.ingest_votes.outputFiles['votes.pkl'] }}"
+          google-key.json: "file:///{{envs.google_credentials}}"
+        outputFiles:
+          - "*.pkl"
+
+        script: |
+          import dataconnector as dc
+          import clouddataingest as di
+          import pandas as pd
+          import os
+          from datetime import datetime
+          from pathlib import Path
+          now = datetime.now().strftime("%Y%m%d_%H%M%S") 
+
+          CREDENTIALS_FILE = os.getenv("GOOGLE_CREDENTIALS")
+          PROJECT_NAME = os.getenv("PROJECT_NAME")
+          BUCKET_NAME = os.getenv("BUCKET_NAME")
+          FILE_PATH = "{{ vars.filepath }}"
+          CHUNKSIZE = {{ vars.chunksize }}
+
+          since = "{{ inputs.since }}"
+          until = "{{ inputs.until }}"
+
+
+          os.makedirs(FILE_PATH, exist_ok=True)
+
+          gcsc = di.gcs_connector(CREDENTIALS_FILE, BUCKET_NAME)
+
+          print("Starting Pipeline")
+
+          __location__ = os.path.realpath(os.getcwd())
+          path = os.path.join(__location__, "voting")
+
+          dfvotes = pd.read_pickle('votes.pkl')
+
+          if(len(dfvotes) > 0):
+            print("Getting votings...")
+            dfvoting = dc.get_voting_of_votes(dfvotes.to_dict('records'), path)
+
+            dfvoting.to_csv(f"{FILE_PATH}/votings_{since}_{until}_{now}.csv")
+            print(f"Got {len(dfvoting)} Votings")
+
+            print("Uploading Votings")
+            gcsc.upload_to_gcs(f"{FILE_PATH}/votings_{since}_{until}_{now}.csv", CHUNKSIZE)
+
+            print("Finished UPLOADING Votings")
+          else:
+            print("No votings to ingest")
+
+pluginDefaults:
+  - type: io.kestra.plugin.scripts.python.Script
+    values:
+      taskRunner:
+        type: io.kestra.plugin.scripts.runner.docker.Docker
+        networkMode: deng_default
+        pullPolicy: NEVER
+      containerImage: openparl-python-cloud:latest
+      inputFiles:
+        clouddataingest.py: "file:///app/scripts/clouddataingest.py"
+        datatransform.py: "file:///app/scripts/datatransform.py"
+        dataconnector.py: "file:///app/scripts/dataconnector.py"
+        google-key.json: "file:///{{envs.google_credentials}}"
+      env:
+        GOOGLE_CREDENTIALS: google-key.json
+        PROJECT_NAME: "{{ envs.project_name }}"
+        BUCKET_NAME: "{{ envs.bucket_name }}"
+
+triggers:
+  - id: weekly_schedule
+    type: io.kestra.plugin.core.trigger.Schedule
+    cron: "0 6 * * 1" # Every Monday, 6 AM
+    inputs:
+      since: "{{ now() | dateAdd(-7, 'DAYS') | date('yyyy-MM-dd') }}"
+      until: "{{ now() | date('yyyy-MM-dd') }}"

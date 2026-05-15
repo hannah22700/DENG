@@ -5,7 +5,7 @@ import pandas as pd
 from sqlalchemy import create_engine
 
 import scripts.dataconnector as dc
-import scripts.dataingest as di
+import scripts.localdataingest as di
 import scripts.datatransform as dt
 
 
@@ -27,9 +27,9 @@ def main(pg_user, pg_pass, pg_host, pg_port, pg_db, chunksize, votecount):
     path = os.path.join(__location__, "voting")
 
     print("Getting votes...")
-    votes = dc.get_votes()
+    votes = dc.get_allVotes()
 
-    dfvotes = pd.DataFrame(votes)
+    dfvotes = pd.DataFrame(votes[:votecount])
     dfvotes = dt.clean_up_votes(dfvotes)
 
     di.ingest_data(
@@ -38,7 +38,7 @@ def main(pg_user, pg_pass, pg_host, pg_port, pg_db, chunksize, votecount):
 
     print("Finished Ingesting Votes")
 
-    print("Gettting vortings")
+    print("Gettting votings")
     dfvoting = dc.get_voting_of_votes(votes[:votecount], path)
     dfvoting = dt.clean_up_voting(dfvoting)
 
