@@ -581,7 +581,3 @@ This Kestra flow loads data from Google Cloud Storage into BigQuery staging tabl
 - Designed for idempotent execution (safe to rerun for the same date).
 - Runs weekly via a scheduled trigger (Monday at 08:00).
 - Uses Docker-based Python execution environment with shared GCP utilities.
-
-```
-
-```
