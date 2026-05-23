@@ -292,9 +292,52 @@ This Kestra flow downloads voting data files from Google Cloud Storage (GCS), st
 
 ### Review Data
 
+For the review of the data open the google cloud console: https://console.cloud.google.com/
+
+#### Cloud Storage
+
+Open Cloud Storage -> Buckets
+
+You should now see the storage bucket you created. Click on its name to browse the files.
+
+There you should two files, one with votes the other with votings from your selected time range and with todays date as timestamp
+
+![Example with Cloud Storage Bucket](media/datareviewbucket.png)
+
+#### Big Query
+
+Open BigQuery -> Studio
+
+You should see the big query dataset you created when you expand your project.
+
+Three tables should be visible:
+
+- votes
+- votings
+- partysummary
+
+You can now check if the pipeline ingested data by using the following select statements:
+
+```sql
+SELECT * FROM `[ProjectName].[BigQueryName].votes` LIMIT 1000
+```
+
+```sql
+SELECT * FROM `[ProjectName].[BigQueryName].votings` LIMIT 1000
+```
+
+```sql
+SELECT * FROM `[ProjectName].[BigQueryName].partysummary` LIMIT 1000
+```
+
+If all of these statements return data the pipeline has succeded.
+
+Example:
+![Example of data review](media/datareview.png)
+
 ### Clean Up
 
-After you are done with testing the pipeline, don't forget to destroy the terraform ressources again with
+After you are done with testing the pipeline, don't forget to destroy the terraform resources again with:
 
 ```bash
 terraform destroy
@@ -308,17 +351,82 @@ Review the changes terraform would like to make and then answer the prompt with 
 
 The following python dependencies are in use:
 | Package | Version | Explanation |
-|-------------------|----------|-------------|
+| --------------------- | ------- | ---------------------------------------------------------------------------------------------- |
 | click | 8.3.1 | used to add parameters to the main script through the command line |
-| jupyter | 1.1.1 | used for jupyter notebooks to play around and test certain things |
+| jupyter | 1.1.1 | used for Jupyter notebooks to play around and test certain things |
 | pandas | 3.0.1 | used for the organization of data into dataframes and some statistical methods |
-| sqlalchemy | 2.0.48 | used for the engine to connect to the posgres DB|
-| psycopg2-binary | 2.9.11 | Used to connect to the postgres DB|
+| sqlalchemy | 2.0.48 | used for the engine to connect to the PostgreSQL DB |
+| psycopg2-binary | 2.9.11 | used to connect to the PostgreSQL DB |
 | swissparlpy | 1.0.0 | used as abstraction of the SwissParl API |
+| dotenv | 0.9.9 | used to load environment variables from a `.env` file for configuration and secrets management |
+| google-cloud-bigquery | 3.41.0 | used to interact with Google BigQuery for querying and storing analytical data |
+| google-cloud-storage | 3.10.1 | used to interact with Google Cloud Storage for uploading and downloading files |
+| pandas-gbq | 0.35.0 | used to integrate pandas dataframes with Google BigQuery |
+| pyarrow | 24.0.0 | used for efficient in-memory columnar data processing and parquet file support |
 
-### Extraction
+### Environment Variables
 
-The data extraction is done with the `dataconnector.py`
+| Variable                   | Example Value              | Explanation                                                              |
+| -------------------------- | -------------------------- | ------------------------------------------------------------------------ |
+| `ENV_GOOGLE_CREDENTIALS`   | `/secrets/google-key.json` | path to the Google Cloud service account credentials JSON file           |
+| `ENV_PROJECT_NAME`         | `awesome-gate-489312-g2`   | Google Cloud project name used for BigQuery and Cloud Storage operations |
+| `ENV_BUCKET_NAME`          | `bu_legislens_01`          | Google Cloud Storage bucket used to store files and datasets             |
+| `ENV_BIGQUERY_NAME`        | `bq_legislens_01`          | BigQuery dataset name where tables are created and loaded                |
+| `KESTRA_USERNAME`          | `admin@kestra.io`          | username/email used to log into the Kestra orchestration UI              |
+| `KESTRA_PASSWORD`          | `Admin1234!`               | password used for the Kestra UI authentication                           |
+| `KESTRA_POSTGRES_USERNAME` | `kestra`                   | PostgreSQL username used internally by Kestra                            |
+| `KESTRA_POSTGRES_PASSWORD` | `k3str4`                   | PostgreSQL password used internally by Kestra                            |
+| `ENV_POSTGRES_USERNAME`    | `root`                     | PostgreSQL username for the application database connection              |
+| `ENV_POSTGRES_PASSWORD`    | `root`                     | PostgreSQL password for the application database connection              |
+| `PGADMIN_DEFAULT_EMAIL`    | `admin@admin.com`          | default login email for the pgAdmin interface                            |
+| `PGADMIN_DEFAULT_PASSWORD` | `root`                     | default password for the pgAdmin interface                               |
+
+> **Note:** The credentials and passwords shown above are example values and should be replaced with secure secrets in production environments.
+
+> **Important:** The `ENV_` prefixes are necessary for Kestra to correctly recognize and inject the environment variables.
+
+### Terraform
+
+Terraform is used to make the environment reproducible
+
+#### Terraform Variables
+
+Terraform also uses variables which at times have the same value as the environment variables:
+
+| Variable            | Default Value              | Explanation                                                                                    |
+| ------------------- | -------------------------- | ---------------------------------------------------------------------------------------------- |
+| `credentials`       | `/secrets/google-key.json` | path to the Google Cloud service account credentials file used by Terraform for authentication |
+| `project`           | `awesome-gate-489312-g2`   | Google Cloud project ID where resources will be created                                        |
+| `region`            | `us-central1`              | default Google Cloud region used for regional resources and services                           |
+| `location`          | `EU`                       | location used for multi-region resources such as BigQuery datasets                             |
+| `bq_dataset_name`   | `bq_legislens_01`          | name of the BigQuery dataset created and managed by Terraform                                  |
+| `gcs_bucket_name`   | `bu_legislens_01`          | name of the Google Cloud Storage bucket created by Terraform                                   |
+| `gcs_storage_class` | `STANDARD`                 | storage class assigned to the Google Cloud Storage bucket                                      |
+
+> **Note:** These variables are used by Terraform to parameterize the infrastructure configuration and make deployments reusable across environments.
+
+#### Resources
+
+| Resource                             | Explanation                                                                                               |
+| ------------------------------------ | --------------------------------------------------------------------------------------------------------- |
+| `google_storage_bucket.bucket`       | creates a Google Cloud Storage bucket used for storing project files and datasets                         |
+| `google_bigquery_dataset.dataset`    | creates a BigQuery dataset used for analytical data storage                                               |
+| `google_bigquery_table.votes`        | creates the `votes` table in BigQuery using the schema definition from `schemas/votes.json`               |
+| `google_bigquery_table.votings`      | creates the `votings` table in BigQuery using the schema definition from `schemas/votings.json`           |
+| `google_bigquery_table.partysummary` | creates the `partysummary` table in BigQuery using the schema definition from `schemas/partysummary.json` |
+
+#### Additional Notes
+
+- The Google provider is configured using service account credentials.
+- The storage bucket is configured with `force_destroy = true` to allow deletion even when files exist.
+- BigQuery tables use external JSON schema definitions for easier schema management.
+- `deletion_protection = false` allows tables to be removed during Terraform destroy operations.
+
+### Scripts
+
+#### Extraction
+
+The data extraction is done with the `dataconnector.py` for bot the local pipeline and the cloud pipeline.
 
 For the extraction of the data the python library swissparlpy is used.
 The Library provides an abstraction to the api which makes it much easier to use.
@@ -333,9 +441,9 @@ The dataconnector contains three methods:
 | save_voting_of_vote(id, path) | helper method that gets the voting records of a single vote and saves it to the filesystem in the current directory to the foled voting. This is done to avoid a timeout when collecting the voting records |
 | def delete_pickels(path)      | helper method to delete the saved pickles on the filesystem                                                                                                                                                 |
 
-### Transformation
+#### Transformation
 
-The data transformation is done with the `datatransform.py`
+The data transformation is done with the `datatransform.py` in case of the local pipeline.
 
 | Method                      | Explanation                                                                                                                                                                                   |
 | --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -344,22 +452,136 @@ The data transformation is done with the `datatransform.py`
 | create_pary_summary(voting) | aggregates information about how every party voted on each bill, including summing up the total seats and calculating the mode for each voting Decision                                       |
 | clean_column(name)          | helper method to remove spaces and special characters from dataframe column names                                                                                                             |
 
-### Load
+#### Load
 
-The loading of the data into the Postgres DB is done with the `main.py`
+The loading of the data into the Postgres DB is done with the `localdataingest.py` for the local pipeline
 | Method | Explanation |
 | ------ | ----------- |
 |ingest_data(engine, data, target_table, chunksize) | converts a dataframe to sql and adds it to the DB |
-| main(pg_user, pg_pass, pg_host, pg_port, pg_db, chunksize) | ties everything together, the loading the transforming and the ingestion of the data.|
+
+For the cloud pipeline loading is done with `clouddataingest.py`
+
+| Method                                                  | Explanation                                                                                                   |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `gcs_connector(credentials, bucketname)`                | initializes a connector for Google Cloud Storage using service account credentials and a target bucket        |
+| `verify_gcs_upload(blob_name)`                          | verifies whether a file exists in the configured Google Cloud Storage bucket                                  |
+| `upload_to_gcs(file_path, chunk_size, max_retries=3)`   | uploads a file to Google Cloud Storage with configurable chunk size and retry handling                        |
+| `get_from_gcs(path)`                                    | downloads and returns the content of a file stored in Google Cloud Storage                                    |
+| `get_blobs()`                                           | retrieves all blobs/files available in the configured Google Cloud Storage bucket                             |
+| `gbq_connector(credentials, bigqueryname, projectname)` | initializes a connector for Google BigQuery using service account credentials, dataset name, and project name |
+| `load_data(df, table)`                                  | loads a pandas dataframe into a BigQuery table and overwrites existing table data                             |
 
 ### Pipeline Orchestration
 
-The pipeline is orchestrated with [Kestra](https://kestra.io/). The flow definition can be found in `flows/openparl_ingest.yml`. It is loaded automatically into Kestra on startup via the `--flow-path` flag.
+The pipeline is orchestrated with [Kestra](https://kestra.io/). The definition of the different flows can be found in `flows/`. It is loaded automatically into Kestra on startup via the `--flow-path` flag.
 
-Some key design decisions:
+There are three flows:
 
-- **Custom Docker image** (`openparl-kestra:latest`): All necessary Python dependencies are pre-installed to avoid re-installing them individually for every task.
-- **pluginDefaults**: We share a base configuration for Docker task runner, container image, script files across all different tasks. This config is defined once under `pluginDefaults` and inherited by all tasks
-- **Variables**: The database connection string and a predefined chunk size (100000) are defined as flow-level variables
-- **Scheduling**: A weekly cron trigger runs the pipeline every Monday morning at 6 AM
-- **Backfills**: The pipeline follows a full-refresh strategy: every run fetches the complete dataset and replaces the existing tables, making it idempotent. A single execution always produces a fully up-to-date database, regardless of missed runs. Backfills can be triggered manually through the Kestra UI under the Triggers tab.
+- openparl_ingest_local -> used for the local pipeline
+- openparl_ingest_datalake -> used for the cloud pipeline
+- openparl_ingest_bigquery -> used for the cloud pipeline
+
+#### Local
+
+This Kestra flow fetches voting data from the Swiss Parliament API (`swissparlpy`), processes it with pandas, and ingests it into a PostgreSQL database.
+
+##### Flow Tasks
+
+| Task                      | Explanation                                                                                                            |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `ingest_votes`            | fetches vote metadata from the Swiss Parliament API, cleans the data, and stores it in the PostgreSQL `votes` table    |
+| `ingest_voting`           | retrieves individual voting records for each vote, transforms the data, and stores it in the PostgreSQL `voting` table |
+| `aggregate_party_summary` | aggregates voting results into party-level summaries and stores them in the `partysummary` table                       |
+
+###### Inputs
+
+| Input       | Explanation                                                                                         |
+| ----------- | --------------------------------------------------------------------------------------------------- |
+| `num_votes` | defines how many votes should be fetched and processed (`10`, `50`, `100`, `250`, `1000`, or `all`) |
+
+##### Variables
+
+| Variable    | Explanation                                         |
+| ----------- | --------------------------------------------------- |
+| `db_url`    | PostgreSQL connection string used across all tasks  |
+| `chunksize` | number of rows inserted into the database per batch |
+
+##### Additional Notes
+
+- Tasks run inside Docker containers using a shared custom image (`openparl-python-local:latest`).
+- Intermediate pandas dataframes are shared between tasks using pickle files.
+- The workflow is automatically triggered every Monday at 6 AM using a cron schedule.
+
+#### Cloud
+
+##### Datalake
+
+This Kestra flow fetches voting data from the Swiss Parliament API (`swissparlpy`) and uploads the processed datasets as CSV files to Google Cloud Storage.
+
+###### Flow Tasks
+
+| Task            | Explanation                                                                                                       |
+| --------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `ingest_votes`  | fetches vote metadata for a given date range, converts it into CSV format, and uploads it to Google Cloud Storage |
+| `votes_exist`   | checks whether vote data was successfully generated before continuing the workflow                                |
+| `ingest_voting` | retrieves individual voting records for the fetched votes and uploads them as CSV files to Google Cloud Storage   |
+
+###### Inputs
+
+| Input   | Explanation                         |
+| ------- | ----------------------------------- |
+| `since` | start date for fetching voting data |
+| `until` | end date for fetching voting data   |
+
+###### Variables
+
+| Variable    | Explanation                                             |
+| ----------- | ------------------------------------------------------- |
+| `chunksize` | upload chunk size used for Google Cloud Storage uploads |
+| `filepath`  | local temporary directory used for generated CSV files  |
+
+###### Additional Notes
+
+- Tasks run inside Docker containers using the custom image `openparl-python-cloud:latest`.
+- Google Cloud credentials and bucket configuration are injected through environment variables.
+- Data is stored in Google Cloud Storage as timestamped CSV files.
+- The workflow runs automatically every Monday at 6 AM and ingests the previous 7 days of voting data.
+
+##### Big Query
+
+This Kestra flow loads data from Google Cloud Storage into BigQuery staging tables, transforms it into final tables, and generates aggregated party summaries.
+
+###### Flow Tasks
+
+| Task                  | Explanation                                                                                                 |
+| --------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `stage_data`          | downloads CSV files from Google Cloud Storage, filters by date, and loads them into BigQuery staging tables |
+| `transform_votes`     | merges staged vote data into the final `votes` table in BigQuery                                            |
+| `transform_votings`   | merges staged voting data into the final `votings` table in BigQuery                                        |
+| `drop_staging`        | removes staging tables after processing to keep the dataset clean                                           |
+| `create_partysummary` | aggregates voting results by party and vote, and writes the final `partysummary` table                      |
+
+###### Input
+
+| Input  | Explanation                                                                  |
+| ------ | ---------------------------------------------------------------------------- |
+| `date` | date used to filter which files from Google Cloud Storage should be ingested |
+
+###### Data Flow
+
+- CSV files are retrieved from Google Cloud Storage
+- Data is loaded into BigQuery staging tables (`stg_votes`, `stg_votings`)
+- Staging tables are merged into final tables using `MERGE` operations
+- Staging tables are dropped after successful processing
+- A final aggregation creates a party-level summary table
+
+###### Additional Notes
+
+- Uses BigQuery `MERGE` statements for incremental updates (no duplicate inserts).
+- Designed for idempotent execution (safe to rerun for the same date).
+- Runs weekly via a scheduled trigger (Monday at 08:00).
+- Uses Docker-based Python execution environment with shared GCP utilities.
+
+```
+
+```
