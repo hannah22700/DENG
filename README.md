@@ -201,6 +201,14 @@ For this run the following commands (start out in the directory where you cloned
 cd terraform
 ```
 
+Initialize terraform:
+
+```bash
+terraform init
+```
+
+Plan your infrastructure:
+
 ```bash
 terraform plan
 ```
@@ -225,11 +233,13 @@ The big query tables should all be empty, but have a defined schema.
 ### Containers
 
 Start the containers up with:
-`docker compose up -d`
+`docker compose -p deng up -d`
+
+Wait for the containers to start.
 
 ### Kestra
 
-Access Kestra on https://localhost:8080
+Access Kestra on http://localhost:8080
 
 Login with the Username and the password you set in .env as KESTRA_USERNAME and KESTRA_PASSWORD
 
@@ -260,6 +270,7 @@ This Kestra flow ingests voting data from the Swiss Parliament API, processes it
 3. Select the start and the end range of the votes that you want to process.
    - The time period has to include a range where the Notionalrat is in session, otherwise you cannot extract any votes. To check when the Nationalrat is in session you can use this website: https://www.parlament.ch/de/ratsbetrieb/sessionen
 4. Click "Execute" again to start
+5. Wait for the flow to complete?
 
 #### openparl_ingest_bigquery
 
@@ -289,6 +300,7 @@ This Kestra flow downloads voting data files from Google Cloud Storage (GCS), st
 2. Click "Execute"
 3. Select the date from which you want to ingest the data. This date references the cloud storage bucket files. So if you are running this on the same day as openparl_ingest_datalake you have to choose the date of that day.
 4. Click "Execute" again to start
+5. Wait for the flow to complete?
 
 ### Review Data
 
@@ -308,7 +320,7 @@ There you should two files, one with votes the other with votings from your sele
 
 Open BigQuery -> Studio
 
-You should see the big query dataset you created when you expand your project.
+You should see the big query dataset you created when you expand your project and you big query dataset.
 
 Three tables should be visible:
 
@@ -344,6 +356,12 @@ terraform destroy
 ```
 
 Review the changes terraform would like to make and then answer the prompt with yes.
+
+Also shutdown the the docker containers:
+
+```bash
+docker compose -p deng down
+```
 
 ## Documentation
 
