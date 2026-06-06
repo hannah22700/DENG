@@ -100,14 +100,14 @@
   {
     "name": "VoteEnd",
     "mode": "",
-    "type": "STRING",
+    "type": "DATETIME",
     "description": "",
     "fields": []
   },
   {
     "name": "VoteEndWithTimezone",
     "mode": "",
-    "type": "STRING",
+    "type": "TIMESTAMP",
     "description": "",
     "fields": []
   }

@@ -27,7 +27,7 @@ variable "bq_dataset_name" {
 
 variable "gcs_bucket_name" {
   description = "My Storage Bucket Name"
-  default     = "bu_legislens_01"
+  default     = "bu_legislens_03"
 }
 
 variable "gcs_storage_class" {

@@ -93,8 +93,8 @@ tasks:
               S.Subject,
               S.MeaningYes,
               S.MeaningNo,
-              S.VoteEnd,
-              S.VoteEndWithTimezone
+              DATETIME(TIMESTAMP(S.VoteEnd)),
+              TIMESTAMP(S.VoteEndWithTimezone)
       );
 
   - id: transform_votings
@@ -155,12 +155,12 @@ tasks:
           S.BillTitle,
           S.IdLegislativePeriod,
           S.IdSession,
-          S.VoteEnd,
+          DATETIME(TIMESTAMP(S.VoteEnd)),
           S.MeaningYes,
           S.MeaningNo,
           S.CantonID,
           S.Subject,
-          S.VoteEndWithTimezone
+          TIMESTAMP(S.VoteEndWithTimezone)
       );
 
   - id: drop_staging

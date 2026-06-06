@@ -599,3 +599,12 @@ This Kestra flow loads data from Google Cloud Storage into BigQuery staging tabl
 - Designed for idempotent execution (safe to rerun for the same date).
 - Runs weekly via a scheduled trigger (Monday at 08:00).
 - Uses Docker-based Python execution environment with shared GCP utilities.
+
+###### Data Partitioning and Clustering
+
+Both tables vote and votings are partitioned by `VoteEnd` (daily) to reduce the amount of data scanned when querying votes within a specific time period, improving performance and lowering query costs.
+
+- **vote**: clustered by `BusinessNumber`, so votes concering the same business can be found quickly.
+- **votings**: clustered by `IdVote`, as queries frequently access or join records using the vote identifier.
+
+This setup aligns the storage layout with the most common query patterns while keeping the tables efficient as data volume grows.

@@ -43,6 +43,15 @@ resource "google_bigquery_table" "votes" {
   table_id            = "votes"
   schema              = file("${path.module}/schemas/votes.json")
   deletion_protection = false
+
+  time_partitioning {
+    type  = "DAY"
+    field = "VoteEnd"
+  }
+
+  clustering = [
+    "BusinessNumber"
+  ]
 }
 
 resource "google_bigquery_table" "votings" {
@@ -50,6 +59,14 @@ resource "google_bigquery_table" "votings" {
   table_id            = "votings"
   schema              = file("${path.module}/schemas/votings.json")
   deletion_protection = false
+  time_partitioning {
+    type  = "DAY"
+    field = "VoteEnd"
+  }
+
+  clustering = [
+    "IdVote"
+  ]
 }
 
 resource "google_bigquery_table" "partysummary" {
